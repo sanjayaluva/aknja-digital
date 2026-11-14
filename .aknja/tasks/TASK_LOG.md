@@ -72,6 +72,32 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   gateway `allowed_data_classes` enforcement gap found by tests and fixed
 - failure_reason: —
 
+## T-006 — Telegram notification outbox (docs/39 reliability, this round)
+
+- task_id: T-006 · capability: software_engineer
+- goal: wire the founder Telegram channel as a durable admin-notification
+  outbox with the docs/39 reliability semantics, plus CLI delivery.
+- inputs: docs/39, config TELEGRAM_BOT_TOKEN/TELEGRAM_ADMIN_CHAT_ID
+- data_classification: INTERNAL · dependencies: T-001 (settings/tenant)
+- acceptance_criteria: idempotent enqueue (unique key); provider-confirmed
+  delivery only on 200/ok; exponential backoff honoring 429 retry_after;
+  terminal FAILED on definitive rejection (400/403) with no re-attempt;
+  unconfigured channel leaves rows PENDING with attempts 0; duplicate
+  marker (`· ref`) in every body; hooks for approval requested, quota
+  hard-stop and AI run parked; concurrent hard-stop workers must not
+  crash admissions (savepoint on the unique-index race).
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `app/modules/ops/notifications.py`, `NotificationOutbox`
+  model + migration `c7d2e8f4a9b1` (roundtrip-verified by
+  scripts/check_migration_notification.py), hooks in governance/resources/
+  orchestrator, CLI `process-notifications` / `send-test-notification`,
+  `tests/test_notifications.py` (13)
+- verification_evidence: 114 tests passing, lint clean; migration upgrade/
+  downgrade/upgrade roundtrip PASS; quota concurrency tests still green
+  with the hard-stop hook active
+- failure_reason: —
+
 ## T-005 — Orchestrator LLM integration + progress protocol (this round)
 
 - task_id: T-005 · capability: software_engineer
@@ -93,7 +119,6 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
 
 ## Open items (next rounds)
 
-- T-006 (candidate): Telegram delivery wiring (token unset, stub present)
 - T-007 (candidate): Playwright E2E + visual comparison (docs/16)
 - T-008 (candidate): benchmark runner for ml/en/hi/ta quality floors (v5.3.2 §6)
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

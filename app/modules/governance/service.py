@@ -163,6 +163,22 @@ def create_approval_request(
         resource_id=str(request.id),
         payload={"gate": gate, "payload_hash": request.payload_hash, "title": title},
     )
+    # Founder alert (docs/39): durable outbox, idempotent by approval id.
+    from app.modules.ops.notifications import notify_admin
+
+    notify_admin(
+        db,
+        template_key="approval.requested",
+        payload={
+            "title": title,
+            "gate": gate,
+            "expires_at": request.expires_at.isoformat(),
+            "nonce": request.nonce,
+        },
+        idempotency_key=f"approval.requested:{request.id}",
+        tenant_id=tenant_id,
+        approval_request_id=request.id,
+    )
     return request
 
 

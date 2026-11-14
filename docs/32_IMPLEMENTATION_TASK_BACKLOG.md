@@ -18,4 +18,4 @@ F1 ✅ provider registry; F2 ✅ usage ledger; F3 ✅ quota snapshot; F4 ✅ ato
 ## Epic G — QA/staging — ◐ PARTIAL
 G1 ◐ workspace runner (models/lifecycle in, provisioning needs a Docker host); G2 ○ Playwright; G3 ○ visual evidence; G4 ○ Compose environment manager; G5 ○ cleanup safety.
 ## Epic H — Production — ○ SPECIFIED, NOT DEPLOYED
-H1 ○ host inventory; H2 ○ capacity manager; H3 ○ reverse proxy; H4 ○ deployment approvals; H5 ○ backups; H6 ○ monitoring/incidents; H7 ○ maintenance billing. Requires capacity admission + drills per docs/19, docs/38; staging hosting rebased to OCI Always-Free ARM (SRS §2.1 erratum).
+H1 ○ host inventory; H2 ○ capacity manager; H3 ○ reverse proxy; H4 ○ deployment approvals; H5 ○ backups; H6 ◐ monitoring/incidents (Telegram admin notification outbox ✅ T-006; alert automation ongoing); H7 ○ maintenance billing. Requires capacity admission + drills per docs/19, docs/38; staging hosting rebased to OCI Always-Free ARM (SRS §2.1 erratum).

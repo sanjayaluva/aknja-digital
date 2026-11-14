@@ -416,6 +416,20 @@ def execute_llm_step(
             db, run=run, principal=principal, to_state=park,
             reason=f"no eligible free LLM provider: {result.reason}",
         )
+        # Founder review-queue alert (docs/39): idempotent by run id.
+        from app.modules.ops.notifications import notify_admin
+
+        notify_admin(
+            db,
+            template_key="run.blocked",
+            payload={
+                "objective": run.objective,
+                "reason": result.reason,
+                "run_id": str(run.id),
+            },
+            idempotency_key=f"run.blocked:{run.id}",
+            tenant_id=run.tenant_id,
+        )
         return {"status": "PENDING_MANUAL", "reason": result.reason, "run_state": run.state}
 
     # FAILED — all eligible providers exhausted (retryable path).

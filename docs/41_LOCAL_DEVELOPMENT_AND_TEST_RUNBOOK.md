@@ -163,3 +163,19 @@ this runbook, docs/33/34 on provider changes, SRS erratum on invalidated
 assumptions), (5) `.aknja/STATUS.md` evidence table + truthful "Not claimed"
 list, (6) one commit + push whose hash lands in the task record.
 Full protocol: `.aknja/README.md` § Development round protocol.
+
+## 12. Telegram notification outbox (T-006)
+
+Env (unset = channel unconfigured; rows queue PENDING, nothing is lost):
+
+    export TELEGRAM_BOT_TOKEN="123456:ABC..."   # from @BotFather
+    export TELEGRAM_ADMIN_CHAT_ID="424242"     # message the bot once, then use the chat id
+
+Test the channel, then drain due notifications (send/retry per docs/39):
+
+    python -m app.cli send-test-notification --language en
+    python -m app.cli process-notifications
+
+Hooks that enqueue: approval.requested, quota.hard_stop (per product per
+UTC day), run.blocked (AI run parked for founder review). Language follows
+the `default_admin_language` setting (ml|en).

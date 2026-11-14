@@ -273,6 +273,24 @@ def admit_usage(
                 f"{product.product_key}: would exceed hard-stop threshold "
                 f"({settings.hard_stop_threshold_pct:g}%)"
             )
+            # Founder alert (docs/39): hard-stop reached — idempotent per
+            # product per UTC day; concurrent workers race safely on the
+            # unique index (the loser skips, the alert already exists).
+            from app.modules.ops.notifications import notify_admin
+
+            effective = snapshot.effective_usage if snapshot else 0
+            notify_admin(
+                db,
+                template_key="quota.hard_stop",
+                payload={
+                    "product_key": product.product_key,
+                    "used_pct": round(effective / product.allowance * 100, 1)
+                    if product.allowance
+                    else 0.0,
+                    "cap_pct": settings.hard_stop_threshold_pct,
+                },
+                idempotency_key=f"quota.hard_stop:{product.product_key}:{utcnow():%Y%m%d}",
+            )
             continue  # try next provider in pool
         permit = generate_token("permit_")
         return AdmissionDecision(

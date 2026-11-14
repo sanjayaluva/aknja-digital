@@ -437,6 +437,82 @@ def cmd_llm_ping(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_process_notifications(_args: argparse.Namespace) -> int:
+    """Drain due Telegram notifications (docs/39: send/retry without loss).
+
+    Unconfigured channel is reported, not treated as failure — the rows stay
+    PENDING and nothing is lost until the founder sets TELEGRAM_BOT_TOKEN /
+    TELEGRAM_ADMIN_CHAT_ID.
+    """
+    db = get_session_local()()
+    try:
+        from app.modules.ops.notifications import pending_count, process_outbox
+
+        summary = process_outbox(db)
+        db.commit()
+        print(
+            f"processed: {summary['due']} due — {summary['sent']} sent, "
+            f"{summary['retried']} scheduled for retry, {summary['failed']} failed, "
+            f"{summary['unconfigured']} waiting for channel config"
+        )
+        remaining = pending_count(db)
+        if remaining:
+            print(f"outbox: {remaining} notification(s) still pending")
+        if summary["unconfigured"]:
+            print("   channel not configured: set TELEGRAM_BOT_TOKEN and "
+                  "TELEGRAM_ADMIN_CHAT_ID (create the bot with @BotFather, "
+                  "then message it once and use the chat id)")
+        return 0 if summary["failed"] == 0 else 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_send_test_notification(args: argparse.Namespace) -> int:
+    """v5.3.2 §8-style 'Test channel' action for the Telegram bot."""
+    import uuid as _uuid
+
+    db = get_session_local()()
+    try:
+        from app.modules.identity.service import bootstrap_internal_tenant
+        from app.modules.ops.notifications import enqueue_notification, process_outbox
+
+        tenant = bootstrap_internal_tenant(db)
+        row = enqueue_notification(
+            db,
+            template_key="system.test",
+            payload={},
+            idempotency_key=f"system.test:{_uuid.uuid4()}",
+            tenant_id=tenant.id,
+            language=args.language,
+        )
+        db.commit()
+        if row is None:  # lost a concurrent race on the unique key
+            print("ERROR: could not enqueue test notification")
+            return 1
+        summary = process_outbox(db)
+        db.commit()
+        if summary["sent"]:
+            print(f"OK test message delivered (ref {row.idempotency_key[-16:]})")
+            return 0
+        if summary["unconfigured"]:
+            print("CHANNEL NOT CONFIGURED — set TELEGRAM_BOT_TOKEN and "
+                  "TELEGRAM_ADMIN_CHAT_ID, then run: "
+                  "python -m app.cli process-notifications")
+            return 1
+        print(f"FAILED to deliver: {row.last_error or 'unknown error'}")
+        return 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aknja", description="Aknja Digital management CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -472,6 +548,14 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.add_argument("--evidence", default="", help="what was checked, by whom")
     p_verify.add_argument("--enable", action="store_true", help="also enable the account for admission")
     p_verify.add_argument("--commercial-use-ok", action="store_true", dest="commercial_use_ok")
+    sub.add_parser(
+        "process-notifications",
+        help="drain the due Telegram notification outbox (send/retry per docs/39)",
+    )
+    p_note = sub.add_parser(
+        "send-test-notification", help="enqueue and deliver a test Telegram message"
+    )
+    p_note.add_argument("--language", default=None, help="ml (default) or en")
     args = parser.parse_args(argv)
 
     get_settings()  # load config eagerly for clear failure
@@ -485,6 +569,8 @@ def main(argv: list[str] | None = None) -> int:
         "register-provider-candidates": cmd_register_provider_candidates,
         "verify-provider": cmd_verify_provider,
         "llm-ping": cmd_llm_ping,
+        "process-notifications": cmd_process_notifications,
+        "send-test-notification": cmd_send_test_notification,
     }
     return handlers[args.command](args)
 

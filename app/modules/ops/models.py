@@ -69,6 +69,45 @@ class EmailOutbox(Base, TimestampMixin):
     )
 
 
+class NotificationOutbox(Base, TimestampMixin):
+    """Durable admin-notification outbox (docs/39: send/retry without loss).
+
+    First channel: Telegram (founder digest/alert channel, ml|en templates).
+    Duplicate prevention: `idempotency_key` is unique, so a business event
+    enqueues exactly once; the rendered body carries a short `· ref` footer
+    so a provider-side duplicate (possible after an uncertain timeout) is
+    identifiable and reconcilable.
+    """
+
+    __tablename__ = "notification_outbox"
+    __table_args__ = (
+        Index("ix_notification_outbox_status", "status", "next_attempt_at"),
+        Index("uq_notification_outbox_idem", "idempotency_key", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True
+    )
+    channel: Mapped[str] = mapped_column(String(16), nullable=False, default="telegram")
+    recipient: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    template_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    language: Mapped[str] = mapped_column(String(8), nullable=False, default="ml")
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    provider_message_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    classification: Mapped[str] = mapped_column(String(32), nullable=False, default="INTERNAL")
+    approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("approval_requests.id"), nullable=True
+    )
+
+
 class Job(Base, TimestampMixin):
     """Database-backed durable job queue (SRS §8: low concurrency initially)."""
 
