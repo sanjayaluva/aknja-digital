@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <h1>{{ project.name }}</h1>
+      <p class="muted">{{ project.lifecycle_state }} · {{ project.hosting_mode }} · progress {{ progress.pct }}%</p>
+    </div>
+    <form method="post" action="/admin/projects/{{ project.id }}/transition" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <select name="to_state">
+        {% set allowed = {
+          'DISCOVERY': ['LEAD_QUALIFIED','ARCHIVED'], 'LEAD_QUALIFIED': ['PROPOSAL_APPROVED','ARCHIVED'],
+          'PROPOSAL_APPROVED': ['CONTRACT_SIGNED','ARCHIVED'], 'CONTRACT_SIGNED': ['ASSET_INTAKE','BLOCKED_ON_CLIENT_KYC'],
+          'ASSET_INTAKE': ['ARCHITECTURE_AND_WIREFRAME','BLOCKED_ON_CLIENT_KYC'], 'BLOCKED_ON_CLIENT_KYC': ['ASSET_INTAKE'],
+          'ARCHITECTURE_AND_WIREFRAME': ['DEVELOPMENT_SPRINT'], 'DEVELOPMENT_SPRINT': ['QA_AND_SECURITY_GATE'],
+          'QA_AND_SECURITY_GATE': ['STAGING_UAT','DEVELOPMENT_SPRINT'], 'STAGING_UAT': ['PRODUCTION_HANDOFF','DEVELOPMENT_SPRINT'],
+          'PRODUCTION_HANDOFF': ['WARRANTY_AND_AMC'], 'WARRANTY_AND_AMC': ['CLOSED'], 'CLOSED': ['ARCHIVED'], 'ARCHIVED': []
+        } %}
+        {% for s in allowed.get(project.lifecycle_state, []) %}<option>{{ s }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary btn-sm" type="submit">Advance state</button>
+    </form>
+  </header>
+
+  {% if progress.total %}
+  <div class="progress"><div class="progress-bar" style="width: {{ progress.pct }}%"></div></div>
+  {% endif %}
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Milestones</h2>
+      {% if milestones %}
+      <table class="table">
+        <thead><tr><th>Milestone</th><th>Weight</th><th>Status</th><th>Amount</th></tr></thead>
+        <tbody>
+        {% for m in milestones %}
+        <tr><td>{{ m.title }}</td><td>{{ m.weight_pct }}%</td><td><span class="tag">{{ m.status }}</span></td><td>₹{{ '%d'|format(m.amount_minor / 100) }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">No milestones yet.</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Staging previews</h2>
+      {% if previews %}
+      <table class="table">
+        <thead><tr><th>URL</th><th>Status</th><th>Expires</th></tr></thead>
+        <tbody>
+        {% for p in previews %}
+        <tr><td class="mono">{{ p.url }}</td><td><span class="tag tag-{{ 'ok' if p.is_active else 'warn' }}">{{ 'ACTIVE' if p.is_active else 'EXPIRED' }}</span></td>
+        <td>{{ p.expires_at.strftime('%d %b %H:%M') if p.expires_at else '—' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">No staging previews yet.</p>{% endif %}
+      <form method="post" action="/admin/projects/{{ project.id }}/staging-previews" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+        <label class="span-2">Preview URL <input name="url" required placeholder="https://staging.example.com/preview"></label>
+        <button class="btn btn-primary btn-sm" type="submit">Publish expiring preview</button>
+      </form>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Tasks</h2>
+    <form method="post" action="/admin/projects/{{ project.id }}/tasks" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label>Title <input name="title" required minlength="3"></label>
+      <label>Priority
+        <select name="priority"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option></select>
+      </label>
+      <label>Estimate (h) <input name="estimate_hours" type="number" min="0" value="0"></label>
+      <button class="btn btn-primary btn-sm" type="submit">Add task</button>
+    </form>
+    {% if tasks %}
+    <table class="table">
+      <thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Move</th></tr></thead>
+      <tbody>
+      {% for t in tasks %}
+      <tr>
+        <td>{{ t.title }}</td>
+        <td><span class="tag tag-{{ 'ok' if t.status in ('DONE','VERIFIED') else 'work' }}">{{ t.status }}</span></td>
+        <td>{{ t.priority }}</td>
+        <td>
+          {% set task_map = {'BACKLOG': ['SPECIFIED','CANCELLED'], 'SPECIFIED': ['IN_PROGRESS','CANCELLED'], 'IN_PROGRESS': ['REVIEW','BLOCKED','CANCELLED'], 'BLOCKED': ['IN_PROGRESS','CANCELLED'], 'REVIEW': ['VERIFIED','IN_PROGRESS'], 'VERIFIED': ['DONE']} %}
+          {% if task_map.get(t.status) %}
+          <form method="post" action="/admin/tasks/{{ t.id }}/transition" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+            <select name="to_status">{% for s in task_map[t.status] %}<option>{{ s }}</option>{% endfor %}</select>
+            <button class="btn btn-sm btn-ghost" type="submit">Move</button>
+          </form>
+          {% else %}<span class="muted">final</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No tasks yet.</p>{% endif %}
+  </section>
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Client feedback &amp; bugs</h2>
+      {% if feedback %}
+      <table class="table">
+        <thead><tr><th>Kind</th><th>Message</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for f in feedback %}
+        <tr><td><span class="tag">{{ f.kind }}</span></td><td>{{ f.message[:80] }}</td><td><span class="tag tag-{{ 'ok' if f.status == 'RESOLVED' else 'work' }}">{{ f.status }}</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">No feedback yet.</p>{% endif %}
+    </section>
+    <section class="card">
+      <h2>UAT records</h2>
+      {% if uat_records %}
+      <table class="table">
+        <thead><tr><th>Decision</th><th>Decided at</th><th>Notes</th></tr></thead>
+        <tbody>
+        {% for u in uat_records %}
+        <tr><td><span class="tag tag-{{ 'ok' if u.decision == 'ACCEPTED' else 'warn' }}">{{ u.decision }}</span></td>
+        <td>{{ u.decided_at.strftime('%d %b %H:%M') if u.decided_at else 'pending' }}</td><td>{{ u.notes[:60] }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">No UAT records yet.</p>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

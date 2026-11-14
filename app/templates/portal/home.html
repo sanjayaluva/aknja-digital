@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}My Projects — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>My Projects</h1><p class="muted">Progress, staging previews and feedback for your engagements.</p></div>
+  </header>
+
+  {% if projects %}
+  <div class="project-grid">
+    {% for p in projects %}
+    <a class="card project-card" href="/portal/projects/{{ p.id }}">
+      <h2>{{ p.name }}</h2>
+      <p class="muted">{{ p.description[:100] }}</p>
+      <div class="pill-row">
+        <span class="tag tag-{{ 'ok' if p.lifecycle_state in ('CLOSED','WARRANTY_AND_AMC') else 'work' }}">{{ p.lifecycle_state }}</span>
+        {% set preview = previews_by_project.get(p.id) %}
+        {% if preview and preview.is_active %}<span class="pill pill-ok">Staging preview live</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <section class="card"><p class="empty">No projects shared with you yet. Your project appears here once delivery starts.</p></section>
+  {% endif %}
+
+  {% if open_feedback_count %}
+  <div class="alert alert-ok">{{ open_feedback_count }} of your feedback items are open and being worked on.</div>
+  {% endif %}
+</div>
+{% endblock %}

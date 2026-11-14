@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Providers &amp; Quota — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Provider Registry &amp; Quota Control</h1>
+      <p class="muted">Zero-cost guard: only FREE_VERIFIED providers are admitted. Unknown or stale quota fails closed.</p></div>
+    {% if emergency_stop.state != 'CLEAR' %}
+    <div class="alert alert-danger">EMERGENCY STOP {{ emergency_stop.state }}</div>
+    {% endif %}
+  </header>
+
+  <section class="card">
+    <h2>Provider accounts</h2>
+    {% if accounts %}
+    <table class="table">
+      <thead><tr><th>Provider</th><th>Plan</th><th>Billing state</th><th>Enabled</th><th>Free-eligible</th></tr></thead>
+      <tbody>
+      {% for a in accounts %}
+      <tr>
+        <td>{{ a.provider }}</td><td>{{ a.plan }}</td>
+        <td><span class="tag tag-{{ 'ok' if a.billing_state == 'FREE_VERIFIED' else 'warn' }}">{{ a.billing_state }}</span></td>
+        <td>{{ 'yes' if a.enabled else 'no' }}</td>
+        <td>{{ '✓' if a.is_eligible_free else '—' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No providers registered. Provider entries are candidates until verified in the actual account (SRS §14).</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Metered products</h2>
+    {% if products %}
+    <table class="table">
+      <thead><tr><th>Product</th><th>Category</th><th>Allowance</th><th>Unit</th><th>Paid</th><th>Enabled</th></tr></thead>
+      <tbody>
+      {% for p in products %}
+      <tr>
+        <td class="mono">{{ p.product_key }}</td><td>{{ p.category }}</td><td>{{ p.allowance }}</td><td>{{ p.unit }}</td>
+        <td>{{ 'yes' if p.is_paid else 'no' }}</td><td>{{ 'yes' if p.enabled else 'no' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No metered products registered.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

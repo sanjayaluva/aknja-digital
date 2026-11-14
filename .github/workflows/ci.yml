@@ -1,19 +1,64 @@
 name: CI
+
 on:
   pull_request:
   push:
     branches: [main]
+
 permissions:
   contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aknja_test
+          POSTGRES_USER: aknja
+          POSTGRES_PASSWORD: ci-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aknja -d aknja_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://aknja:ci-postgres-password@localhost:5432/aknja_test
+      APP_ENV: local
+      SECRET_KEY: ci-secret-key-not-for-production-use-only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: pytest
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check app tests
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Run tests
+        run: pytest -q --cov=app --cov-report=term-missing
+      - name: Verify install (schema + seeds + taxonomy import)
+        run: |
+          python -m app.cli create-super-admin --email ci-founder@example.com --password "CiFounder#1"
+          python -m app.cli seed
+          python -m app.cli import-taxonomy
+          python -m app.cli verify-install
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (gitleaks, pinned)
+        uses: gitleaks/gitleaks-action@ff98106e4c1b2b90b9262b644d5f3538b7c54de4 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Service Catalog — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <h1>Service Catalog</h1>
+      <p class="muted">Full preserved source taxonomy. Availability and readiness are tracked separately — catalogued ≠ sellable.</p>
+    </div>
+    <form method="get" action="/admin/catalog" class="search-form">
+      <input name="search" value="{{ search }}" placeholder="Search services…">
+      <button class="btn btn-ghost btn-sm" type="submit">Search</button>
+    </form>
+  </header>
+
+  {% if tree %}
+    {% for category, subs in tree %}
+    <section class="card">
+      <h2>{{ category.code }} {{ category.name }} <span class="tag tag-muted">{{ category.domain }}</span></h2>
+      {% for sub, services in subs %}
+      <h3 class="sub-head">{{ sub.code }} {{ sub.name }}</h3>
+      <ul class="service-list">
+        {% for s in services %}
+        <li>
+          <span class="service-name">{{ s.name }}</span>
+          <span class="tag tag-{{ 'ok' if s.readiness == 'READY' else 'warn' }}">{{ s.readiness }}</span>
+          <span class="tag">{{ s.availability }}</span>
+          <span class="tag tag-muted">{{ s.execution_mode }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  {% else %}
+  <section class="card"><p class="empty">Catalog is empty — run <code>python -m app.cli import-taxonomy</code> to import the source taxonomy.</p></section>
+  {% endif %}
+</div>
+{% endblock %}

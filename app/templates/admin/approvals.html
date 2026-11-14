@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Approvals — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head"><h1>HITL Approvals</h1></header>
+  <section class="card">
+    <h2>Pending ({{ pending|length }})</h2>
+    {% if pending %}
+    <table class="table">
+      <thead><tr><th>Gate</th><th>Title</th><th>Payload hash</th><th>Expires</th><th>Decision</th></tr></thead>
+      <tbody>
+      {% for a in pending %}
+      <tr>
+        <td><span class="tag">{{ a.gate }}</span></td>
+        <td>{{ a.title }}</td>
+        <td class="mono hash">{{ a.payload_hash[:16] }}…</td>
+        <td>{{ a.expires_at.strftime('%d %b %H:%M') }}</td>
+        <td>
+          <form method="post" action="/admin/approvals/{{ a.id }}/decide" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+            <button class="btn btn-sm btn-primary" name="decision" value="APPROVED" type="submit">Approve</button>
+            <button class="btn btn-sm btn-danger" name="decision" value="REJECTED" type="submit">Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">Nothing waiting for approval.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Recently decided</h2>
+    {% if decided %}
+    <table class="table">
+      <thead><tr><th>Gate</th><th>Title</th><th>Status</th><th>Decided</th></tr></thead>
+      <tbody>
+      {% for a in decided %}
+      <tr><td>{{ a.gate }}</td><td>{{ a.title }}</td><td><span class="tag tag-{{ 'ok' if a.status == 'APPROVED' else 'warn' }}">{{ a.status }}</span></td><td>{{ a.decided_at.strftime('%d %b %H:%M') if a.decided_at else '—' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No decisions recorded yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

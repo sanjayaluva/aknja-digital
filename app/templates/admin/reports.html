@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Reports — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Reports</h1><p class="muted">Source: {{ generated_at }}. Never fabricated — every number is a live query.</p></div>
+  </header>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-num">₹{{ '%d'|format(revenue_minor / 100) }}</div><div class="stat-label">Reconciled revenue (minor units ÷ 100)</div></div>
+  </div>
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Lead funnel</h2>
+      {% if lead_funnel %}
+      <table class="table"><thead><tr><th>Status</th><th>Count</th></tr></thead>
+        <tbody>{% for status, count in lead_funnel %}<tr><td>{{ status }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody>
+      </table>
+      {% else %}<p class="empty">No leads yet.</p>{% endif %}
+    </section>
+    <section class="card">
+      <h2>Projects by state</h2>
+      {% if project_states %}
+      <table class="table"><thead><tr><th>State</th><th>Count</th></tr></thead>
+        <tbody>{% for state, count in project_states %}<tr><td>{{ state }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody>
+      </table>
+      {% else %}<p class="empty">No projects yet.</p>{% endif %}
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Invoice status</h2>
+    {% if invoice_status %}
+    <table class="table"><thead><tr><th>Status</th><th>Count</th></tr></thead>
+      <tbody>{% for status, count in invoice_status %}<tr><td>{{ status }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<p class="empty">No invoices yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Leads — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head"><h1>Leads</h1></header>
+
+  <section class="card">
+    <h2>New lead</h2>
+    <form method="post" action="/admin/leads" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label>Title <input name="title" required minlength="3"></label>
+      <label>Source
+        <select name="source">
+          <option>DIRECT</option><option>UPWORK</option><option>FIVERR</option>
+          <option>FREELANCER_COM</option><option>GURU_COM</option><option>CONTRA</option><option>REDDIT_FORHIRE</option>
+        </select>
+      </label>
+      <label>Contact email <input name="contact_email" type="email"></label>
+      <label>Budget (paise) <input name="budget_minor" type="number" min="0" value="0"></label>
+      <label>Feasibility 0-100 <input name="feasibility_score" type="number" min="0" max="100" value="0"></label>
+      <label class="span-2">Description <textarea name="description" rows="2"></textarea></label>
+      <button class="btn btn-primary" type="submit">Add lead</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Lead pipeline</h2>
+    {% if leads %}
+    <table class="table">
+      <thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Feasibility</th><th>Budget</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for lead in leads %}
+      <tr>
+        <td>{{ lead.title }}</td>
+        <td>{{ lead.source }}</td>
+        <td><span class="tag tag-{{ 'ok' if lead.status in ('WON','QUALIFIED') else 'work' }}">{{ lead.status }}</span></td>
+        <td>{{ lead.feasibility_score }}/100</td>
+        <td>₹{{ '%d'|format(lead.budget_minor / 100) }} {{ lead.currency }}</td>
+        <td>
+          {% if lead.status not in ('WON','LOST','DISQUALIFIED') %}
+          <form method="post" action="/admin/leads/{{ lead.id }}/qualify" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+            <select name="to_status">
+              {% set next_map = {'NEW': ['CONTACTED','DISQUALIFIED'], 'CONTACTED': ['QUALIFIED','DISQUALIFIED','LOST'], 'QUALIFIED': ['DISCOVERY','DISQUALIFIED','LOST'], 'DISCOVERY': ['PROPOSAL_SENT','DISQUALIFIED','LOST'], 'PROPOSAL_SENT': ['WON','LOST']} %}
+              {% for s in next_map.get(lead.status, []) %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-sm btn-ghost" type="submit">Move</button>
+          </form>
+          {% else %}
+          <span class="muted">closed</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No leads yet. The marketplace bridge is read-only by policy; add leads manually here.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

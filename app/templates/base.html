@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/alpine.min.js" defer></script>
+</head>
+<body>
+<div class="layout">
+  {% if principal and principal.is_internal %}
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">A</span>
+      <div>
+        <div class="brand-name">{{ app_name }}</div>
+        <div class="brand-sub">Operations Console</div>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-group">Operations</div>
+      <a href="/admin" class="{{ 'active' if request.url.path == '/admin' else '' }}">Overview</a>
+      <a href="/admin/leads" class="{{ 'active' if '/leads' in request.url.path else '' }}">Leads</a>
+      <a href="/admin/clients" class="{{ 'active' if '/clients' in request.url.path else '' }}">Clients</a>
+      <a href="/admin/catalog" class="{{ 'active' if '/catalog' in request.url.path else '' }}">Service Catalog</a>
+      <a href="/admin/invoices" class="{{ 'active' if '/invoices' in request.url.path else '' }}">Invoices</a>
+      <a href="/admin/projects" class="{{ 'active' if '/projects' in request.url.path else '' }}">Projects</a>
+      <a href="/admin/approvals" class="{{ 'active' if '/approvals' in request.url.path else '' }}">Approvals</a>
+      <a href="/admin/reports" class="{{ 'active' if '/reports' in request.url.path else '' }}">Reports</a>
+      <div class="nav-group">System Control</div>
+      <a href="/admin/ai" class="{{ 'active' if request.url.path == '/admin/ai' else '' }}">AI Orchestrator</a>
+      <a href="/admin/providers" class="{{ 'active' if '/providers' in request.url.path else '' }}">Providers &amp; Quota</a>
+      <a href="/admin/settings" class="{{ 'active' if '/settings' in request.url.path else '' }}">Settings</a>
+      <a href="/admin/audit" class="{{ 'active' if '/audit' in request.url.path else '' }}">Audit</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <span class="avatar">{{ principal.email[0]|upper }}</span>
+        <div>
+          <div class="user-name">{{ principal.full_name or principal.email }}</div>
+          <div class="user-role">{{ principal.role }}</div>
+        </div>
+      </div>
+      <form method="post" action="/api/v1/auth/logout" hx-post="/api/v1/auth/logout" hx-headers='{"x-csrf-token": "{{ principal.csrf_token }}"}'>
+        <button class="btn btn-ghost btn-sm" type="submit">Sign out</button>
+      </form>
+    </div>
+  </aside>
+  {% elif principal and principal.is_portal %}
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">A</span>
+      <div>
+        <div class="brand-name">{{ app_name }}</div>
+        <div class="brand-sub">Client Portal</div>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-group">Workspace</div>
+      <a href="/portal" class="{{ 'active' if request.url.path == '/portal' else '' }}">My Projects</a>
+      <a href="/portal/invoices" class="{{ 'active' if '/invoices' in request.url.path else '' }}">Invoices</a>
+    </nav>
+    <div class="sidebar-footer">
+      <form method="post" action="/api/v1/auth/logout" hx-post="/api/v1/auth/logout" hx-headers='{"x-csrf-token": "{{ principal.csrf_token }}"}'>
+        <button class="btn btn-ghost btn-sm" type="submit">Sign out</button>
+      </form>
+    </div>
+  </aside>
+  {% endif %}
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

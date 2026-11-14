@@ -28,3 +28,9 @@ secrets/
 *.sql.gz
 playwright/.cache/
 test-results/
+# Local runtime state and sandbox databases
+var/
+pgdata*/
+*.db
+*.sqlite3
+node_modules/

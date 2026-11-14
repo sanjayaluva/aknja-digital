@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Overview — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <h1>Operations Overview</h1>
+      <p class="muted">{{ brand_name }} · live database counts (no fabricated metrics)</p>
+    </div>
+    {% if emergency_stop.state != 'CLEAR' %}
+    <div class="alert alert-danger">EMERGENCY STOP {{ emergency_stop.state }} — {{ emergency_stop.reason }}</div>
+    {% endif %}
+  </header>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-num">{{ stats.leads_open }}</div><div class="stat-label">Open leads</div></div>
+    <div class="stat"><div class="stat-num">{{ stats.clients }}</div><div class="stat-label">Clients</div></div>
+    <div class="stat"><div class="stat-num">{{ stats.projects_active }}</div><div class="stat-label">Active projects</div></div>
+    <div class="stat"><div class="stat-num">{{ stats.tasks_open }}</div><div class="stat-label">Open tasks</div></div>
+    <div class="stat"><div class="stat-num">{{ stats.proposals_pending }}</div><div class="stat-label">Proposals sent</div></div>
+    <div class="stat"><div class="stat-num">₹{{ '%d'|format(stats.invoices_due_minor / 100) }}</div><div class="stat-label">Invoices due</div></div>
+    <div class="stat"><div class="stat-num">{{ stats.feedback_open }}</div><div class="stat-label">Open feedback</div></div>
+    <div class="stat"><div class="stat-num">{{ stats.provider_products }}</div><div class="stat-label">Provider products</div></div>
+  </div>
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Pending approvals ({{ pending_approvals|length }})</h2>
+      {% if pending_approvals %}
+      <table class="table">
+        <thead><tr><th>Gate</th><th>Title</th><th>Expires</th></tr></thead>
+        <tbody>
+        {% for a in pending_approvals %}
+          <tr><td><span class="tag">{{ a.gate }}</span></td><td>{{ a.title }}</td><td>{{ a.expires_at.strftime('%d %b %H:%M') }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <a class="btn btn-primary btn-sm" href="/admin/approvals">Review approvals</a>
+      {% else %}
+      <p class="empty">No approvals waiting. All clear.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Recent projects</h2>
+      {% if projects %}
+      <table class="table">
+        <thead><tr><th>Project</th><th>State</th></tr></thead>
+        <tbody>
+        {% for p in projects %}
+          <tr>
+            <td><a href="/admin/projects/{{ p.id }}">{{ p.name }}</a></td>
+            <td><span class="tag tag-{{ 'ok' if p.lifecycle_state in ('CLOSED','ARCHIVED') else 'work' }}">{{ p.lifecycle_state }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">No projects yet. Create a client, then a project.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Protected governance status</h2>
+    <div class="pill-row">
+      <span class="pill pill-ok">ZERO_COST_ONLY enforced</span>
+      <span class="pill pill-ok">Paid spend ceiling: INR 0</span>
+      <span class="pill pill-ok">Audit ledger: append-only, hash-chained</span>
+      <span class="pill pill-ok">No AI self-approval</span>
+    </div>
+  </section>
+</div>
+{% endblock %}

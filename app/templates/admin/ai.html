@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}AI Orchestrator — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>AI Orchestrator</h1>
+      <p class="muted">One orchestrator, task-scoped capabilities. Every side effect passes the Tool Gateway; nothing completes without verification evidence.</p></div>
+  </header>
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Capability registry</h2>
+      {% if capabilities %}
+      <table class="table">
+        <thead><tr><th>Key</th><th>Name</th><th>Active</th></tr></thead>
+        <tbody>
+        {% for c in capabilities %}
+        <tr><td class="mono">{{ c.key }}</td><td>{{ c.name }}</td><td>{{ 'yes' if c.is_active else 'no' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">Run <code>python -m app.cli seed</code> to install the capability registry.</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Tool allow-list (Tool Gateway)</h2>
+      <table class="table">
+        <thead><tr><th>Tool</th><th>Risk</th><th>Approval</th><th>Active</th></tr></thead>
+        <tbody>
+        {% for t in tools %}
+        <tr>
+          <td class="mono">{{ t.name }}</td>
+          <td><span class="tag tag-{{ 'danger' if t.risk_class in ('HIGH','CRITICAL') else 'work' }}">{{ t.risk_class }}</span></td>
+          <td>{{ 'required' if t.requires_approval else 'not required' }}</td>
+          <td>{{ 'yes' if t.is_active else 'no' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Recent runs</h2>
+    {% if runs %}
+    <table class="table">
+      <thead><tr><th>Objective</th><th>State</th><th>Evidence</th><th>Budget</th></tr></thead>
+      <tbody>
+      {% for r in runs %}
+      <tr>
+        <td>{{ r.objective[:70] }}</td>
+        <td><span class="tag tag-{{ 'ok' if r.state in ('COMPLETED','CONTINUE') else 'work' }}">{{ r.state }}</span></td>
+        <td>{{ '✓ verified' if r.verification_evidence else '—' }}</td>
+        <td>{{ r.budget_minutes }} min</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No runs recorded. Runs are created via <code>POST /api/v1/agent-runs</code>.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Recent tool executions (audit trail)</h2>
+    {% if recent_tool_audits %}
+    <table class="table">
+      <thead><tr><th>Time</th><th>Action</th><th>Actor</th></tr></thead>
+      <tbody>
+      {% for e in recent_tool_audits %}
+      <tr><td>{{ e.created_at.strftime('%d %b %H:%M:%S') }}</td><td>{{ e.action }}</td><td>{{ e.actor_id[:12] }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No tool executions yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

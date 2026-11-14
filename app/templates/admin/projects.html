@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Projects — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head"><h1>Projects</h1></header>
+  <section class="card">
+    <h2>Project list</h2>
+    {% if projects %}
+    <table class="table">
+      <thead><tr><th>Project</th><th>State</th><th>Hosting</th><th>Created</th></tr></thead>
+      <tbody>
+      {% for p in projects %}
+      <tr>
+        <td><a href="/admin/projects/{{ p.id }}">{{ p.name }}</a></td>
+        <td><span class="tag tag-{{ 'ok' if p.lifecycle_state in ('CLOSED','ARCHIVED') else 'work' }}">{{ p.lifecycle_state }}</span></td>
+        <td>{{ p.hosting_mode }}</td>
+        <td>{{ p.created_at.strftime('%d %b %Y') }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No projects yet. Create a client first, then a project via the API or after a signed contract.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

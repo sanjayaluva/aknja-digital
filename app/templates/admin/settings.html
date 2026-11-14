@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Settings — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>System Settings</h1>
+      <p class="muted">Zero-hardcode configuration. Saving validates types, audits the change and invalidates the cache immediately.</p></div>
+    {% if saved %}<div class="alert alert-ok">Settings saved and audited.</div>{% endif %}
+  </header>
+
+  <section class="card">
+    <h2>Protected governance (not editable here)</h2>
+    <div class="pill-row">
+      {% for key, label in protected.items() %}
+      <span class="pill pill-ok">{{ label }}</span>
+      {% endfor %}
+    </div>
+    <p class="muted">Protected invariants change only through reviewed code + founder approval (.aknja/policies).</p>
+  </section>
+
+  <form method="post" action="/admin/settings">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    {% for category, settings in grouped.items() %}
+    <section class="card">
+      <h2>{{ category|replace('_', ' ')|title }}</h2>
+      <div class="settings-grid">
+        {% for s in settings %}
+        <label class="setting">
+          <span class="setting-key">{{ s.key }}</span>
+          {% if s.value_type == 'bool' %}
+          <select name="{{ s.key }}">
+            <option value="true" {{ 'selected' if s.value_json else '' }}>true</option>
+            <option value="false" {{ 'selected' if not s.value_json else '' }}>false</option>
+          </select>
+          {% elif s.value_type == 'json' %}
+          <textarea name="{{ s.key }}" rows="2">{{ s.value_json | tojson }}</textarea>
+          {% else %}
+          <input name="{{ s.key }}" value="{{ s.value_json }}">
+          {% endif %}
+          <span class="muted">{{ s.description }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Save all settings</button>
+  </form>
+</div>
+{% endblock %}

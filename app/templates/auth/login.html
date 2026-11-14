@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Sign in — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <form class="login-card" method="post" id="login-form"
+        hx-post="/api/v1/auth/login" hx-trigger="submit">
+    <h1>{{ app_name }}</h1>
+    <p class="muted">Operations console and client delivery portal</p>
+    <label>Email
+      <input type="email" name="email" required autocomplete="username" placeholder="founder@aknja.pp.ua">
+    </label>
+    <label>Password
+      <input type="password" name="password" required minlength="8" autocomplete="current-password">
+    </label>
+    <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+    <div id="login-error" class="form-error" hidden></div>
+  </form>
+</div>
+<script>
+  document.getElementById('login-form').addEventListener('htmx:afterRequest', function (evt) {
+    const xhr = evt.detail.xhr;
+    if (xhr.status === 200) {
+      window.location.href = '/';
+    } else {
+      const box = document.getElementById('login-error');
+      box.hidden = false;
+      try {
+        box.textContent = JSON.parse(xhr.responseText).error.message;
+      } catch (e) {
+        box.textContent = 'Sign-in failed';
+      }
+    }
+  });
+</script>
+{% endblock %}

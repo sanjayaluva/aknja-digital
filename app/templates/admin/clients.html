@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Clients — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head"><h1>Clients</h1></header>
+  <section class="card">
+    <h2>New client</h2>
+    <form method="post" action="/admin/clients" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label>Display name <input name="display_name" required minlength="2"></label>
+      <label>Email <input name="email" type="email"></label>
+      <label>Phone <input name="phone"></label>
+      <button class="btn btn-primary" type="submit">Add client</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>All clients</h2>
+    {% if clients %}
+    <table class="table">
+      <thead><tr><th>Name</th><th>Status</th><th>Email</th><th>Created</th></tr></thead>
+      <tbody>
+      {% for c in clients %}
+      <tr><td>{{ c.display_name }}</td><td><span class="tag">{{ c.status }}</span></td><td>{{ c.email }}</td><td>{{ c.created_at.strftime('%d %b %Y') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No clients yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

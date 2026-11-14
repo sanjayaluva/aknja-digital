@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Audit — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Audit Ledger</h1><p class="muted">Append-only, hash-chained. Updates and deletes are rejected at the database level.</p></div>
+    <span class="pill {{ 'pill-ok' if chain_valid else 'pill-danger' }}">{{ 'CHAIN VALID' if chain_valid else 'CHAIN BROKEN' }}</span>
+  </header>
+  <section class="card">
+    {% if events %}
+    <table class="table">
+      <thead><tr><th>#</th><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Entry hash</th></tr></thead>
+      <tbody>
+      {% for e in events %}
+      <tr>
+        <td>{{ e.id }}</td>
+        <td>{{ e.created_at.strftime('%d %b %H:%M:%S') }}</td>
+        <td>{{ e.actor_type }}<span class="muted mono">{{ e.actor_id[:8] if e.actor_id }}</span></td>
+        <td>{{ e.action }}</td>
+        <td>{{ e.resource_type }}</td>
+        <td class="mono hash">{{ e.entry_hash[:16] }}…</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No audit events yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

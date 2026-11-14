@@ -17,5 +17,6 @@ ADRs:
 - `adr/ADR-004-resource-and-zero-cost-policy.md`
 - `adr/ADR-005-production-hosting-and-operations.md`
 - `adr/ADR-006-data-and-memory.md`
+- `adr/ADR-007-sync-sqlalchemy.md`
 
 These decisions are the implementation baseline. Any change requires a new ADR and compatibility review.

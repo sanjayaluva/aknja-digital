@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Invoices — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head"><h1>My Invoices</h1></header>
+  <section class="card">
+    {% if invoices %}
+    <table class="table">
+      <thead><tr><th>Number</th><th>Status</th><th>Amount</th><th>Paid</th><th>Due</th></tr></thead>
+      <tbody>
+      {% for i in invoices %}
+      <tr>
+        <td class="mono">{{ i.number }}</td>
+        <td><span class="tag tag-{{ 'ok' if i.status == 'PAID' else 'work' }}">{{ i.status }}</span></td>
+        <td>₹{{ '%d'|format(i.amount_minor / 100) }}</td>
+        <td>₹{{ '%d'|format(i.paid_amount_minor / 100) }}</td>
+        <td>₹{{ '%d'|format(i.amount_due_minor / 100) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No invoices yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

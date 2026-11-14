@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>{{ project.name }}</h1><p class="muted">{{ project.lifecycle_state }} · {{ progress.pct }}% complete</p></div>
+    <form method="post" action="/portal/projects/{{ project.id }}/uat" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <input type="hidden" name="notes" value="Accepted from client portal">
+      <button class="btn btn-primary btn-sm" name="decision" value="ACCEPTED" type="submit">Accept UAT</button>
+    </form>
+  </header>
+
+  {% if progress.total %}
+  <div class="progress"><div class="progress-bar" style="width: {{ progress.pct }}%"></div></div>
+  {% endif %}
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Milestones</h2>
+      {% if milestones %}
+      <table class="table">
+        <thead><tr><th>Milestone</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for m in milestones %}
+        <tr><td>{{ m.title }}</td><td><span class="tag tag-{{ 'ok' if m.status in ('ACCEPTED','PAID') else 'work' }}">{{ m.status }}</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">Milestones will appear once planning completes.</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Staging preview</h2>
+      {% set active = [] %}
+      {% for p in previews %}{% if p.is_active %}{% set _ = active.append(p) %}{% endif %}{% endfor %}
+      {% if active %}
+        {% for p in active %}
+        <p><a class="btn btn-primary" href="{{ p.url }}" target="_blank" rel="noopener">Open staging preview</a></p>
+        <p class="muted">Expires {{ p.expires_at.strftime('%d %b %H:%M') if p.expires_at else 'on release' }}</p>
+        {% endfor %}
+      {% else %}
+      <p class="empty">No active preview. A link appears here when the next milestone is staged.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Send feedback or report a bug</h2>
+    <form method="post" action="/portal/projects/{{ project.id }}/feedback" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label>Kind
+        <select name="kind">
+          <option value="FEEDBACK">Feedback</option>
+          <option value="BUG_REPORT">Bug report</option>
+          <option value="REVISION_REQUEST">Revision request</option>
+        </select>
+      </label>
+      <label>Page / module <input name="page_or_module" placeholder="e.g. Checkout page"></label>
+      <label>Severity
+        <select name="severity"><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select>
+      </label>
+      <label class="span-2">Message <textarea name="message" rows="3" required minlength="3"></textarea></label>
+      <label class="span-2">Steps to reproduce (for bugs) <textarea name="reproduction_steps" rows="2"></textarea></label>
+      <button class="btn btn-primary" type="submit">Submit</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>My feedback history</h2>
+    {% if feedback %}
+    <table class="table">
+      <thead><tr><th>Kind</th><th>Message</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for f in feedback %}
+      <tr><td>{{ f.kind }}</td><td>{{ f.message[:100] }}</td><td><span class="tag tag-{{ 'ok' if f.status == 'RESOLVED' else 'work' }}">{{ f.status }}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No feedback submitted yet.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Invoices</h2>
+    {% if invoices %}
+    <table class="table">
+      <thead><tr><th>Number</th><th>Status</th><th>Amount</th><th>Due</th></tr></thead>
+      <tbody>
+      {% for i in invoices %}
+      <tr><td class="mono">{{ i.number }}</td><td><span class="tag">{{ i.status }}</span></td>
+      <td>₹{{ '%d'|format(i.amount_minor / 100) }}</td><td>₹{{ '%d'|format(i.amount_due_minor / 100) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No invoices for this project yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
