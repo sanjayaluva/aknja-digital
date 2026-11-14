@@ -268,6 +268,136 @@ def cmd_demo_seed(_args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_register_provider_candidates(_args: argparse.Namespace) -> int:
+    """Seed the documented free-tier candidate pool (docs/33, v5.3.2 §5).
+
+    Candidates are FREE_UNVERIFIED + disabled with unknown allowance —
+    the quota engine fails closed on all of them until verification.
+    """
+    db = get_session_local()()
+    try:
+        from app.modules.identity.service import bootstrap_internal_tenant
+        from app.modules.resources.candidates import register_candidate_providers
+
+        tenant = bootstrap_internal_tenant(db)
+        stats = register_candidate_providers(db, tenant.id)
+        db.commit()
+        print(
+            f"OK candidate providers registered: {stats['accounts']} accounts, "
+            f"{stats['products']} metered products "
+            f"({stats['skipped']} already present). All are FREE_UNVERIFIED/disabled."
+        )
+        print("   Verify each in the provider console, then run: "
+              "python -m app.cli verify-provider --provider <name> ...")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_verify_provider(args: argparse.Namespace) -> int:
+    """Record verification evidence and (with --enable) activate a candidate.
+
+    This is the docs/33 worksheet turned into an audited founder action:
+    the account flips to FREE_VERIFIED, the allowance is set from the real
+    console value, a fresh quota snapshot is recorded and an audit event is
+    written. Nothing is admitted before this step.
+    """
+    db = get_session_local()()
+    try:
+        from sqlalchemy import select
+
+        from app.core.enums import BillingState, UserRole
+        from app.core.security import utcnow
+        from app.modules.governance.service import record_audit
+        from app.modules.identity.models import TenantMembership
+        from app.modules.identity.service import Principal, bootstrap_internal_tenant
+        from app.modules.resources import service as quota
+        from app.modules.resources.models import ProviderAccount, ProviderProduct
+
+        tenant = bootstrap_internal_tenant(db)
+        founder_id = db.scalar(
+            select(TenantMembership.user_id).where(
+                TenantMembership.tenant_id == tenant.id,
+                TenantMembership.role == UserRole.SUPER_ADMIN.value,
+            )
+        )
+        principal = Principal(
+            user_id=founder_id or tenant.id,  # fall back to tenant id if no admin yet
+            email="cli-founder",
+            tenant_id=tenant.id,
+            role=UserRole.SUPER_ADMIN,
+            client_id=None,
+            session_id=founder_id or tenant.id,
+            csrf_token="",
+        )
+        account = db.scalar(
+            select(ProviderAccount).where(
+                ProviderAccount.tenant_id == tenant.id,
+                ProviderAccount.provider == args.provider,
+            )
+        )
+        if account is None:
+            print(f"ERROR: provider '{args.provider}' is not registered")
+            return 1
+        product = db.scalar(
+            select(ProviderProduct).where(
+                ProviderProduct.account_id == account.id,
+                ProviderProduct.product_key == args.product_key,
+            )
+        )
+        if product is None:
+            products = db.scalars(
+                select(ProviderProduct.product_key).where(ProviderProduct.account_id == account.id)
+            ).all()
+            print(f"ERROR: product '{args.product_key}' not found. Available: {', '.join(products)}")
+            return 1
+        if args.allowance is None or args.allowance <= 0:
+            print("ERROR: --allowance (verified console value, > 0) is required")
+            return 1
+
+        product.allowance = int(args.allowance)
+        product.metric_key = args.metric or product.metric_key
+        product.enabled = True
+        account.billing_state = BillingState.FREE_VERIFIED.value
+        account.commercial_use_ok = args.commercial_use_ok
+        account.last_verified_at = utcnow()
+        if args.enable:
+            account.enabled = True
+        quota.record_snapshot(db, product, locally_metered=0, confidence="MEDIUM")
+        record_audit(
+            db,
+            tenant_id=tenant.id,
+            actor_type="USER",
+            actor_id=str(principal.user_id),
+            action="provider.verified",
+            resource_type="provider_product",
+            resource_id=str(product.id),
+            payload={
+                "provider": args.provider,
+                "product_key": args.product_key,
+                "allowance": int(args.allowance),
+                "docs_url": args.docs_url,
+                "evidence": args.evidence,
+                "enabled": bool(args.enable),
+            },
+        )
+        db.commit()
+        state = "ENABLED" if args.enable else "verified (still disabled)"
+        print(f"OK {args.provider}/{args.product_key}: FREE_VERIFIED, allowance={args.allowance} — {state}")
+        print("   Evidence recorded in the audit ledger (action=provider.verified).")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aknja", description="Aknja Digital management CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -281,6 +411,21 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("seed", help="seed settings, capabilities and tools")
     sub.add_parser("verify-install", help="verify installation evidence")
     sub.add_parser("demo-seed", help="create labelled synthetic demo data (never in production)")
+    sub.add_parser(
+        "register-provider-candidates",
+        help="seed the documented free-tier candidate pool (FREE_UNVERIFIED, disabled)",
+    )
+    p_verify = sub.add_parser(
+        "verify-provider", help="record verification evidence and enable a candidate provider"
+    )
+    p_verify.add_argument("--provider", required=True, help="provider key, e.g. groq")
+    p_verify.add_argument("--product-key", required=True, dest="product_key")
+    p_verify.add_argument("--allowance", type=int, default=None, help="verified console allowance (> 0)")
+    p_verify.add_argument("--metric", default=None, help="override metric key, e.g. requests")
+    p_verify.add_argument("--docs-url", default="", dest="docs_url")
+    p_verify.add_argument("--evidence", default="", help="what was checked, by whom")
+    p_verify.add_argument("--enable", action="store_true", help="also enable the account for admission")
+    p_verify.add_argument("--commercial-use-ok", action="store_true", dest="commercial_use_ok")
     args = parser.parse_args(argv)
 
     get_settings()  # load config eagerly for clear failure
@@ -291,6 +436,8 @@ def main(argv: list[str] | None = None) -> int:
         "seed": cmd_seed,
         "verify-install": cmd_verify_install,
         "demo-seed": cmd_demo_seed,
+        "register-provider-candidates": cmd_register_provider_candidates,
+        "verify-provider": cmd_verify_provider,
     }
     return handlers[args.command](args)
 

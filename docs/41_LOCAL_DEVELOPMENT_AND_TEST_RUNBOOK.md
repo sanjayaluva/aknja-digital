@@ -86,3 +86,35 @@ docker compose --profile tools run --rm bootstrap # seed + taxonomy + verify
   require `SET aknja.audit_admin = 'on'` in the same transaction.
 - **Providers never admitted:** expected. Only `FREE_VERIFIED` + enabled
   accounts with fresh snapshots are eligible; everything else fails closed.
+
+## 9. Free-tier provider pool: registration and verification
+
+The documented candidate pool (docs/33, `docs/source_provider_pools_v5.3.2.md`
+§5, SRS §9) covers eight categories: relational DB (Neon/Supabase/OCI),
+object storage (R2/Tigris/B2/OCI), AI/LLM (Gemini/Groq/Cerebras/OpenRouter/
+Mistral/HF), transactional email (Brevo/Resend/MailerSend), cache/queue
+(Upstash), speech (Azure F0/Sarvam), monitoring and hosting/compute
+(OCI A1/GitHub Actions/Kaggle). `.env.example` lists every key slot; keys
+alone enable nothing.
+
+```bash
+# 1) Seed the candidate pool (idempotent, all FREE_UNVERIFIED + disabled):
+python -m app.cli register-provider-candidates
+
+# 2) For each provider you actually own, verify it in the provider console
+#    (plan, quota, reset window, privacy, commercial-use terms — docs/33
+#    worksheet) and record the evidence:
+python -m app.cli verify-provider \
+  --provider groq --product-key "groq free tier" \
+  --allowance 14400 --metric requests \
+  --docs-url "https://console.groq.com/docs/rate-limits" \
+  --evidence "verified in console <date> by <reviewer>" \
+  --commercial-use-ok --enable
+```
+
+Until step 2 runs for a provider, the quota engine fails closed on it —
+that is the intended zero-cost behaviour, not a bug. Verification is audited
+(`provider.verified`) and re-running `register-provider-candidates` never
+resets an already-verified account. Privacy note: the free Gemini tier uses
+content for training — confidential client data must never be routed there
+(v5.3.2 §5C); the registry metadata carries this warning.

@@ -26,4 +26,4 @@ Evidence rule (unchanged): a status changes only with tests, commands and their 
 
 **Test suite:** 80 tests, all passing (`pytest -q`), including concurrency tests against real PostgreSQL. Lint: `ruff check app tests` clean.
 
-**Not claimed:** staging/production deployment, Playwright E2E, provider adapters verified against live accounts (all external providers remain disabled until account verification per SRS §14), Telegram delivery (integration stub present, token unset).
+**Not claimed:** live provider accounts verified in the actual console — the documented candidate pool (21 providers across 8 categories) is seeded as FREE_UNVERIFIED/disabled via `register-provider-candidates`, and activation requires the audited `verify-provider` step (docs/33 worksheet; implemented and tested in `tests/test_provider_candidates.py`). Staging/production deployment, Playwright E2E, provider adapters verified against live accounts (all external providers remain disabled until account verification per SRS §14), Telegram delivery (integration stub present, token unset).
