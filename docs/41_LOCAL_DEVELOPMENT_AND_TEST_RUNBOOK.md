@@ -152,3 +152,14 @@ python -m app.cli llm-ping --provider gemini --model gemini-2.5-flash \
 Requires: `AI_PROVIDER_ENABLED=true` in `.env` (master switch), the
 provider key in settings, and the provider verified+enabled in the registry
 (`verify-provider`). Unverified providers fail closed with guidance.
+
+## 11. Development round protocol
+
+Every development request is one round and must update, before it counts as
+done: (1) code + tests + lint, (2) `.aknja/tasks/TASK_LOG.md` record with
+verification evidence, (3) `.aknja/memory/` episodic summary with provenance,
+(4) every numbered doc the round touches (backlog docs/32, roadmap docs/04,
+this runbook, docs/33/34 on provider changes, SRS erratum on invalidated
+assumptions), (5) `.aknja/STATUS.md` evidence table + truthful "Not claimed"
+list, (6) one commit + push whose hash lands in the task record.
+Full protocol: `.aknja/README.md` § Development round protocol.

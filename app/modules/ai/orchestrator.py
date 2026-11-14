@@ -99,7 +99,10 @@ def seed_capabilities(db: Session, tenant_id: uuid.UUID) -> list[AgentCapability
                 key=key,
                 name=name,
                 description=description,
-                allowed_tools=["catalog.search", "project.summarize", "artifact.register", "email.draft"],
+                allowed_tools=[
+                    "catalog.search", "project.summarize", "artifact.register",
+                    "email.draft", "llm.generate",
+                ],
                 allowed_data_classes=[DataClassification.INTERNAL.value, DataClassification.PUBLIC.value],
             )
         )
@@ -275,3 +278,149 @@ def add_verification_evidence(
         resource_id=str(run.id),
     )
     return run
+
+
+# --- LLM steps (v5.3.2 §5C) -------------------------------------------------
+# Maps each seeded capability to its default task profile. A model response
+# is never a completed action: the step result feeds VERIFY, and PENDING_MANUAL
+# never silently degrades a client deliverable — it parks the run for a human.
+CAPABILITY_TASKS: dict[str, str] = {
+    "planning_analyst": "requirements",
+    "software_engineer": "code_review",
+    "qa_security": "qa_review",
+    "research_docs": "summarization",
+    "business_ops": "proposal_draft",
+    "ui_ux_creative": "proposal_draft",
+    "digital_marketing": "proposal_draft",
+    "analytics_cro": "classification",
+    "support_maintenance": "classification",
+}
+
+# States in which a run may perform model work.
+LLM_STEP_STATES = {
+    AgentRunState.PLAN,
+    AgentRunState.EXECUTE_LOW_RISK,
+    AgentRunState.EXECUTE_APPROVED,
+}
+
+
+def execute_llm_step(
+    db: Session,
+    *,
+    run: AgentRun,
+    principal: Principal,
+    prompt: str,
+    task: str | None = None,
+    model: str | None = None,
+    http_client=None,
+    settings=None,
+) -> dict:
+    """Run one LLM step for a run through the governed inference layer.
+
+    Policy (all enforced before any egress):
+      - the run must be in PLAN / EXECUTE_LOW_RISK / EXECUTE_APPROVED;
+      - the capability must allow the `llm.generate` tool;
+      - the run's data classification must be PUBLIC/INTERNAL (third-party
+        model egress contract) and allowed by the capability.
+
+    Outcome handling:
+      - SUCCEEDED — event + audit recorded, run stays in its execution state
+        and the caller moves it to VERIFY with the step output;
+      - PENDING_MANUAL — run parks in BLOCKED (founder review queue), never
+        a silent degrade (EXECUTE_APPROVED parks in RETRY_WAIT, the closest
+        legal state, since BLOCKED is not reachable from there);
+      - FAILED — run parks in RETRY_WAIT (transient provider exhaustion).
+    """
+    from app.modules.ai.inference import TASK_PROFILES, llm_complete
+
+    current = AgentRunState(run.state)
+    if current not in LLM_STEP_STATES:
+        raise ConflictError(
+            f"LLM steps are not allowed in state {current.value}",
+            details={"state": current.value},
+        )
+    capability = db.get(AgentCapability, run.capability_id)
+    if capability is None:
+        raise NotFoundError("Capability missing for run")
+    if "llm.generate" not in (capability.allowed_tools or []):
+        raise PolicyBlockedError(
+            f"Capability '{capability.key}' is not allowed to use llm.generate"
+        )
+
+    # Data-class gate: third-party LLM egress accepts PUBLIC/INTERNAL only.
+    classification = run.data_classification or DataClassification.INTERNAL.value
+    if classification not in (
+        DataClassification.PUBLIC.value,
+        DataClassification.INTERNAL.value,
+    ):
+        transition_run(
+            db, run=run, principal=principal, to_state=AgentRunState.BLOCKED,
+            reason=f"data classification {classification} cannot egress to LLM providers",
+        )
+        raise PolicyBlockedError(
+            f"Run data classification {classification} cannot be sent to an LLM provider"
+        )
+    if classification not in (capability.allowed_data_classes or []):
+        raise PolicyBlockedError(
+            f"Capability '{capability.key}' does not accept {classification} data"
+        )
+
+    resolved_task = task or CAPABILITY_TASKS.get(capability.key, "summarization")
+    if resolved_task not in TASK_PROFILES:
+        raise ConflictError(f"Unknown task profile '{resolved_task}'")
+
+    result = llm_complete(
+        db,
+        tenant_id=run.tenant_id,
+        task=resolved_task,
+        prompt=prompt,
+        model=model,
+        http_client=http_client,
+        settings=settings,
+    )
+
+    if result.status == "SUCCEEDED":
+        _record_event(
+            db, run, run.state, run.state,
+            f"llm step succeeded: {result.provider}/{result.model} "
+            f"({result.latency_ms} ms, task={resolved_task})",
+            None,
+        )
+        record_audit(
+            db,
+            tenant_id=run.tenant_id,
+            actor_type="USER",
+            actor_id=str(principal.user_id),
+            action="agent_run.llm_step",
+            resource_type="agent_run",
+            resource_id=str(run.id),
+            payload={"provider": result.provider, "model": result.model, "task": resolved_task},
+        )
+        return {
+            "status": "SUCCEEDED",
+            "text": result.text,
+            "provider": result.provider,
+            "model": result.model,
+            "latency_ms": result.latency_ms,
+            "task": resolved_task,
+            "run_state": run.state,
+        }
+
+    if result.status == "PENDING_MANUAL":
+        park = (
+            AgentRunState.RETRY_WAIT
+            if current == AgentRunState.EXECUTE_APPROVED
+            else AgentRunState.BLOCKED
+        )
+        transition_run(
+            db, run=run, principal=principal, to_state=park,
+            reason=f"no eligible free LLM provider: {result.reason}",
+        )
+        return {"status": "PENDING_MANUAL", "reason": result.reason, "run_state": run.state}
+
+    # FAILED — all eligible providers exhausted (retryable path).
+    transition_run(
+        db, run=run, principal=principal, to_state=AgentRunState.RETRY_WAIT,
+        reason=f"llm step failed after failover: {result.reason}",
+    )
+    return {"status": "FAILED", "reason": result.reason, "run_state": run.state}
