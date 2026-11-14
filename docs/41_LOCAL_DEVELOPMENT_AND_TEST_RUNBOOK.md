@@ -126,3 +126,29 @@ OCI A1, GitHub Actions, Kaggle, **Colab, Modal, HF Spaces, Cloudflare
 Pages, Jina**) plus the web-researched watchlist of `docs/34_FREE_SERVICE_CANDIDATE_WATCHLIST.md`
 (Workers AI, GitHub Models, UptimeRobot, Better Stack, Brave Search, Tavily,
 Redis Cloud — researched 2026-11-14, provenance recorded per entry).
+
+## 10. LLM inference layer and llm-ping
+
+`app/modules/ai/inference.py` is the provider-neutral inference layer
+(v5.3.2 §5C): 7 task profiles (classification, translation, summarization,
+requirements, code_review, proposal_draft, qa_review), HTTP adapters for
+Groq, GitHub Models, Gemini and Cloudflare Workers AI (OpenAI-compatible or
+native REST, no vendor SDKs), per-attempt quota admission through the
+zero-cost engine, audited failover on 429/5xx to the next eligible free
+provider, and a fail-closed PENDING_MANUAL result when no verified provider
+remains. Every attempt is logged in `llm_call_logs` with a prompt hash only.
+
+The governed entry point is the `llm.generate` tool through the Tool
+Gateway — PUBLIC/INTERNAL data only; CONFIDENTIAL and RESTRICTED data can
+never egress to a third-party model.
+
+```bash
+# Test a verified provider with one real completion (v5.3.2 §8 action):
+python -m app.cli llm-ping --provider groq
+python -m app.cli llm-ping --provider gemini --model gemini-2.5-flash \
+  --prompt "Reply with exactly: PONG"
+```
+
+Requires: `AI_PROVIDER_ENABLED=true` in `.env` (master switch), the
+provider key in settings, and the provider verified+enabled in the registry
+(`verify-provider`). Unverified providers fail closed with guidance.

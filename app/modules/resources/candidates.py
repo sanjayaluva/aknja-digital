@@ -181,14 +181,14 @@ CANDIDATE_PROVIDERS: list[dict] = [
         "display_name": "Hugging Face serverless inference",
         "secret_ref": "HF_TOKEN",
         "docs_url": "",
-        "note": "Distinguish free static hosting (Spaces) from compute-backed "
-        "hardware pricing (docs/33).",
+        "note": "Serverless inference API only. Spaces is NOT a free hosting "
+        "option: Docker and Gradio Spaces require a paid plan to create since "
+        "2026-07 (huggingface.co/docs/hub/en/spaces-overview); only Static "
+        "Spaces remain free. Staging hosting moved to OCI Always-Free ARM "
+        "(SRS §2.1 erratum).",
         "products": [
             ("hf serverless inference", "requests", "requests", "DAILY", "unknown",
              "verify model availability and limits"),
-            ("hf spaces hosting", "spaces", "spaces", "MONTHLY", "unknown",
-             "free static Spaces vs paid compute hardware — verify plan",
-             ProviderCategory.HOSTING_COMPUTE),
         ],
     },
     # --- D. Transactional email pool (v5.3.2 §5D) --------------------------
@@ -373,9 +373,6 @@ CANDIDATE_PROVIDERS: list[dict] = [
              "verify free rate limits without key / with key"),
         ],
     },
-    # huggingface gains a Spaces hosting product (SRS staging profile
-    # UNIFIED_STAGING_HF_NEON runs on an HF Docker Space) — added below in the
-    # huggingface entry via the per-product category override.
 
     # =====================================================================
     # WATCHLIST — web-researched 2026-11-14, NOT in the source docs.
@@ -527,8 +524,8 @@ def register_candidate_providers(db: Session, tenant_id: uuid.UUID) -> dict[str,
         account.data_policy_url = candidate["docs_url"] or account.data_policy_url
         for spec in candidate["products"]:
             key, metric, unit, reset, documented, doc_note = spec[:6]
-            # Optional 7th element overrides the account-level category
-            # (e.g. HF Spaces is hosting while the account is AI/LLM).
+            # Optional 7th element overrides the account-level category when
+            # a provider serves multiple categories.
             category = spec[6].value if len(spec) > 6 else candidate["category"].value
             product = db.scalar(
                 select(ProviderProduct).where(

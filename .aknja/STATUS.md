@@ -26,4 +26,6 @@ Evidence rule (unchanged): a status changes only with tests, commands and their 
 
 **Test suite:** 80 tests, all passing (`pytest -q`), including concurrency tests against real PostgreSQL. Lint: `ruff check app tests` clean.
 
+**Hosting plan change (2026-11-14):** Hugging Face Spaces Docker/Gradio hosting moved to paid plans; withdrawn from the free pool (SRS §2.1 erratum, docs/34). Free staging rebases onto OCI Always-Free ARM; Hugging Face remains only as a serverless inference candidate.
+
 **Not claimed:** live provider accounts verified in the actual console — the candidate pool (32 providers across 9 categories — doc-sourced pool plus the doc 34 web-researched watchlist: Workers AI, GitHub Models, UptimeRobot, Better Stack, Brave, Tavily, Redis Cloud) is seeded as FREE_UNVERIFIED/disabled via `register-provider-candidates`, and activation requires the audited `verify-provider` step (docs/33 worksheet; implemented and tested in `tests/test_provider_candidates.py`). Staging/production deployment, Playwright E2E, provider adapters verified against live accounts (all external providers remain disabled until account verification per SRS §14), Telegram delivery (integration stub present, token unset).

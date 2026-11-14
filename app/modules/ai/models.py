@@ -211,3 +211,28 @@ class MemoryRecord(Base, TimestampMixin):
     )
     approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LLMCallLog(Base, TimestampMixin):
+    """Reproducibility record for LLM inference (v5.3.2 §5C).
+
+    Stores provider/model + prompt-template version for every attempt, plus
+    a prompt HASH only — raw prompts may contain client content and are
+    never persisted here.
+    """
+
+    __tablename__ = "llm_call_logs"
+    __table_args__ = (Index("ix_llm_call_logs_tenant_created", "tenant_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    task: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)  # SUCCEEDED|FAILED|PENDING_MANUAL
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    template_version: Mapped[str] = mapped_column(String(16), nullable=False, default="v1")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)

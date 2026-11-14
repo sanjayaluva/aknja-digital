@@ -398,6 +398,45 @@ def cmd_verify_provider(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_llm_ping(args: argparse.Namespace) -> int:
+    """Test one verified LLM provider (v5.3.2 §8 'Test provider' action).
+
+    Runs a single completion through the governed inference layer against
+    the named provider only — no failover, so the result reflects that
+    provider's health, quota and credentials directly.
+    """
+    db = get_session_local()()
+    try:
+        from app.modules.ai.inference import llm_complete
+        from app.modules.identity.service import bootstrap_internal_tenant
+
+        tenant = bootstrap_internal_tenant(db)
+        result = llm_complete(
+            db,
+            tenant_id=tenant.id,
+            task=args.task,
+            prompt=args.prompt,
+            model=args.model,
+            target_provider=args.provider,
+        )
+        db.commit()
+        if result.status == "SUCCEEDED":
+            print(f"OK {result.provider}/{result.model} — {result.latency_ms} ms")
+            print(f"   response: {result.text.strip()[:400]}")
+            return 0
+        print(f"FAILED [{result.status}] {result.reason}")
+        if "not eligible" in result.reason or "no AI_LLM product" in result.reason:
+            print("   run: python -m app.cli verify-provider --provider "
+                  f"{args.provider} --product-key \"...\" --allowance <console value> --enable")
+        return 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aknja", description="Aknja Digital management CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -415,6 +454,13 @@ def main(argv: list[str] | None = None) -> int:
         "register-provider-candidates",
         help="seed the documented free-tier candidate pool (FREE_UNVERIFIED, disabled)",
     )
+    p_ping = sub.add_parser(
+        "llm-ping", help="test a verified LLM provider with one real completion"
+    )
+    p_ping.add_argument("--provider", required=True, help="provider key, e.g. groq")
+    p_ping.add_argument("--model", default=None, help="override the provider default model")
+    p_ping.add_argument("--prompt", default="Reply with exactly: PONG")
+    p_ping.add_argument("--task", default="classification", help="task profile key")
     p_verify = sub.add_parser(
         "verify-provider", help="record verification evidence and enable a candidate provider"
     )
@@ -438,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
         "demo-seed": cmd_demo_seed,
         "register-provider-candidates": cmd_register_provider_candidates,
         "verify-provider": cmd_verify_provider,
+        "llm-ping": cmd_llm_ping,
     }
     return handlers[args.command](args)
 

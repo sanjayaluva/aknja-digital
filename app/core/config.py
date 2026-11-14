@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_admin_chat_id: str = ""
 
+    # --- Layer-1 free LLM provider credentials (SRS §9, v5.3.2 §5C).
+    # Keys alone enable nothing: the registry must also hold a FREE_VERIFIED,
+    # enabled provider product before the inference layer will admit calls. ---
+    gemini_api_keys: SecretStr = SecretStr("")          # comma-separated
+    groq_api_keys: SecretStr = SecretStr("")            # comma-separated
+    github_models_token: SecretStr = SecretStr("")
+    cloudflare_api_token: SecretStr = SecretStr("")     # Workers AI (+ Pages)
+    cloudflare_account_id: str = ""                     # same account as R2
+    llm_default_timeout_s: int = 20
+
     # --- Upload limits ---
     max_upload_bytes: int = 20 * 1024 * 1024
     session_ttl_hours: int = 24 * 7

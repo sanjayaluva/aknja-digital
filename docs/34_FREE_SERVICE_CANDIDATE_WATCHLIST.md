@@ -14,9 +14,16 @@ This register extends the doc-sourced pool (`docs/33`, `docs/source_provider_poo
 |---|---|---|---|
 | Google Colab | hosting/compute | SRS §7 ("Colab/Kaggle are opportunistic batch compute, not durable production hosting"), SRS §8.4 `gpu_checkpoint_interval_min`, docs/33, docs/14 | interactive/best-effort GPU; checkpoint jobs; never upload confidential client assets |
 | Modal.com | hosting/compute | SRS §8.4 Layer 4 ("Modal.com free credits") | docs/33: trial credits are one-time, never perpetual free |
-| Hugging Face Spaces | hosting/compute | SRS §8.2 staging profile `UNIFIED_STAGING_HF_NEON` (HF Docker Space, 16 GB RAM) | docs/33: distinguish free static hosting from compute-backed hardware pricing |
 | Cloudflare Pages | hosting/compute | docs/33 ("Cloudflare Pages/R2: verify limits...") | verify limits, billing behavior, current plan |
 | Jina Reader | search | SRS §7 anti-ban guard ("rate-limited Jina Reader endpoints") | read-only ingestion, rate-limited; no automated form-filling/bot-bidding |
+
+> **Withdrawn 2026-11-14 — Hugging Face Spaces (Docker/Gradio hosting).**
+> HF moved Docker and Gradio Spaces to paid plans (PRO for personal, Team or
+> Enterprise for organizations); only Static Spaces remain free
+> (https://huggingface.co/docs/hub/en/spaces-overview). The SRS §2.1 staging
+> profile `UNIFIED_STAGING_HF_NEON` (HF Docker Space host) is therefore no
+> longer a zero-cost option — see the SRS §2.1 erratum. The `huggingface`
+> registry account keeps only the serverless inference product.
 
 2. **Web-researched watchlist (researched 2026-11-14)** — free tiers that
    exist on the public internet today and fit the existing category pools.

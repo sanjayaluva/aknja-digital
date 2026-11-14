@@ -188,11 +188,17 @@ def admit_usage(
     quantity: int,
     task_id: uuid.UUID | None = None,
     idempotency_key: str,
+    product_id: uuid.UUID | None = None,
+    exclude_product_ids: list[uuid.UUID] | None = None,
 ) -> AdmissionDecision:
     """Reserve quota atomically from the best eligible free provider product.
 
     Implements the docs/13 reservation algorithm steps 1-6:
     classify → filter pool → reject ineligible → estimate → reserve → permit.
+
+    `product_id` targets one specific product (provider "Test provider"
+    action / llm-ping); `exclude_product_ids` lets the LLM failover loop
+    move away from providers that just returned 429/5xx (v5.3.2 §3).
     """
     settings = get_settings()
     if settings.zero_cost_mode:
@@ -220,8 +226,24 @@ def admit_usage(
         )
         .order_by(ProviderAccount.last_verified_at.desc().nullslast())
     )
+    if product_id is not None:
+        candidates = candidates.where(ProviderProduct.id == product_id)
+    if exclude_product_ids:
+        candidates = candidates.where(ProviderProduct.id.notin_(exclude_product_ids))
     rows = db.execute(candidates).all()
     if not rows:
+        if product_id is not None:
+            return AdmissionDecision(
+                admitted=False,
+                reason="target provider product is not eligible "
+                "(must be FREE_VERIFIED, enabled, free, within quota)",
+            )
+        if exclude_product_ids:
+            return AdmissionDecision(
+                admitted=False,
+                reason="no eligible FREE_VERIFIED provider product remains "
+                "after excluding failed providers",
+            )
         return AdmissionDecision(
             admitted=False,
             reason="no eligible FREE_VERIFIED provider product in this category",

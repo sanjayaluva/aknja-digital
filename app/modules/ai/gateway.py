@@ -36,16 +36,24 @@ from app.core.enums import (
 )
 from app.core.errors import AuthorizationError, ConflictError, NotFoundError, PolicyBlockedError
 from app.core.security import canonical_payload_hash, utcnow
+from app.modules.ai.inference import TASK_PROFILES, llm_complete
 from app.modules.ai.models import ToolDefinition, ToolExecution
 from app.modules.governance.service import record_audit
 from app.modules.identity.service import Principal
 
 # Built-in deterministic tool implementations (internal, no egress).
-BUILTIN_TOOLS: dict[str, Callable[[Session, dict[str, Any]], dict[str, Any]]] = {}
+BUILTIN_TOOLS: dict[str, Callable[[Session, dict[str, Any], dict[str, Any]], dict[str, Any]]] = {}
+
+# Tools whose implementations run their OWN per-provider quota admission
+# (the LLM inference layer needs per-attempt granularity for failover, so
+# the gateway's generic egress admission would double-count — v5.3.2 §3).
+QUOTA_SELF_MANAGED_TOOLS = {"llm.generate"}
 
 
 def builtin_tool(name: str) -> Callable:
-    def register(fn: Callable[[Session, dict[str, Any]], dict[str, Any]]) -> Callable:
+    def register(
+        fn: Callable[[Session, dict[str, Any], dict[str, Any]], dict[str, Any]],
+    ) -> Callable[[Session, dict[str, Any], dict[str, Any]], dict[str, Any]]:
         BUILTIN_TOOLS[name] = fn
         return fn
 
@@ -177,6 +185,19 @@ class ToolGateway:
             db.flush()
             raise PolicyBlockedError("Tool is not approved for CONFIDENTIAL data egress")
 
+        # (4b) tool data-class allow-list: egress-approved tools still only
+        # accept the classifications they were reviewed for (llm.generate is
+        # PUBLIC/INTERNAL only — CONFIDENTIAL client data never leaves for a
+        # third-party model, v5.3.2 §5C privacy gate).
+        allowed_classes = tool.allowed_data_classes or [c.value for c in DataClassification]
+        if data_class not in allowed_classes:
+            execution.status = ToolExecutionStatus.BLOCKED.value
+            execution.error = f"data classification {data_class} is not allowed for this tool"
+            db.flush()
+            raise PolicyBlockedError(
+                f"Tool '{tool_name}' does not accept {data_class} data"
+            )
+
         # (5) approval requirement
         if tool.requires_approval:
             if approval_request_id is None:
@@ -203,7 +224,9 @@ class ToolGateway:
                 raise PolicyBlockedError("Approval is bound to a different payload")
 
         # (6) quota permit — external metered tools reserve quota before use.
-        if tool.egress_allowed:
+        # Self-managed tools (LLM inference) do their own per-provider
+        # admission inside the implementation for failover granularity.
+        if tool.egress_allowed and tool.name not in QUOTA_SELF_MANAGED_TOOLS:
             from app.core.enums import ProviderCategory
             from app.modules.resources.service import admit_usage
 
@@ -244,7 +267,14 @@ class ToolGateway:
         try:
             if impl is None:
                 raise NotFoundError(f"No implementation registered for tool '{tool.name}'")
-            result = impl(db, arguments)
+            # Execution context for tools that need tenant/actor scope beyond
+            # their declared arguments (e.g. the LLM inference layer).
+            ctx: dict[str, Any] = {
+                "tenant_id": tenant_id,
+                "actor_id": actor_id,
+                "execution_id": str(execution.id),
+            }
+            result = impl(db, arguments, ctx)
             elapsed_ms = int((time.monotonic() - started) * 1000)
             execution.status = ToolExecutionStatus.SUCCEEDED.value
             execution.result = {**result, "elapsed_ms": elapsed_ms}
@@ -330,6 +360,7 @@ def seed_builtin_tools(db: Session) -> list[ToolDefinition]:
             False,
             [],
             120,
+            False,
         ),
         (
             "project.summarize",
@@ -339,6 +370,7 @@ def seed_builtin_tools(db: Session) -> list[ToolDefinition]:
             False,
             [],
             60,
+            False,
         ),
         (
             "artifact.register",
@@ -357,6 +389,28 @@ def seed_builtin_tools(db: Session) -> list[ToolDefinition]:
             False,
             [],
             30,
+            False,
+        ),
+        (
+            "llm.generate",
+            (
+                "Generate text with a free-tier LLM through the governed inference "
+                "layer (task profiles, quota admission, failover, audit)."
+            ),
+            {
+                "type": "object",
+                "required": ["task", "prompt"],
+                "properties": {
+                    "task": {"type": "string", "enum": list(TASK_PROFILES)},
+                    "prompt": {"type": "string"},
+                    "model": {"type": "string"},
+                },
+            },
+            ToolRiskClass.MEDIUM,
+            False,
+            [DataClassification.PUBLIC.value, DataClassification.INTERNAL.value],
+            30,
+            True,
         ),
         (
             "email.draft",
@@ -374,10 +428,11 @@ def seed_builtin_tools(db: Session) -> list[ToolDefinition]:
             True,
             [],
             10,
+            False,
         ),
     ]
     created = []
-    for name, desc, schema, risk, requires_approval, classes, rate in specs:
+    for name, desc, schema, risk, requires_approval, classes, rate, egress in specs:
         tool = db.scalar(select(ToolDefinition).where(ToolDefinition.name == name))
         if tool is None:
             tool = ToolDefinition(
@@ -387,6 +442,7 @@ def seed_builtin_tools(db: Session) -> list[ToolDefinition]:
                 risk_class=risk.value,
                 requires_approval=requires_approval,
                 allowed_data_classes=classes or [c.value for c in DataClassification],
+                egress_allowed=egress,
                 timeout_seconds=30,
                 rate_limit_per_minute=rate,
             )
@@ -400,7 +456,7 @@ def seed_builtin_tools(db: Session) -> list[ToolDefinition]:
 
 
 @builtin_tool("catalog.search")
-def _tool_catalog_search(db: Session, args: dict[str, Any]) -> dict[str, Any]:
+def _tool_catalog_search(db: Session, args: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     from app.modules.catalog.models import Service, ServiceSubcategory
 
     query = f"%{args['query'].lower()}%"
@@ -425,7 +481,7 @@ def _tool_catalog_search(db: Session, args: dict[str, Any]) -> dict[str, Any]:
 
 
 @builtin_tool("project.summarize")
-def _tool_project_summarize(db: Session, args: dict[str, Any]) -> dict[str, Any]:
+def _tool_project_summarize(db: Session, args: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     from app.modules.delivery.models import Feedback, Milestone, Project, Task
 
     project = db.get(Project, uuid.UUID(args["project_id"]))
@@ -449,7 +505,7 @@ def _tool_project_summarize(db: Session, args: dict[str, Any]) -> dict[str, Any]
 
 
 @builtin_tool("artifact.register")
-def _tool_artifact_register(db: Session, args: dict[str, Any]) -> dict[str, Any]:
+def _tool_artifact_register(db: Session, args: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     from app.modules.delivery.models import Artifact, Project
 
     project = db.get(Project, uuid.UUID(args["project_id"]))
@@ -469,7 +525,7 @@ def _tool_artifact_register(db: Session, args: dict[str, Any]) -> dict[str, Any]
 
 
 @builtin_tool("email.draft")
-def _tool_email_draft(db: Session, args: dict[str, Any]) -> dict[str, Any]:
+def _tool_email_draft(db: Session, args: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     from app.modules.ops.models import EmailOutbox
 
     outbox = EmailOutbox(
@@ -482,3 +538,26 @@ def _tool_email_draft(db: Session, args: dict[str, Any]) -> dict[str, Any]:
     db.add(outbox)
     db.flush()
     return {"outbox_id": str(outbox.id), "note": "draft queued; send requires approval"}
+
+@builtin_tool("llm.generate")
+def _tool_llm_generate(db: Session, args: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    from app.modules.ai.inference import LLMResult
+
+    result: LLMResult = llm_complete(
+        db,
+        tenant_id=ctx["tenant_id"],
+        task=args["task"],
+        prompt=args["prompt"],
+        model=args.get("model") or None,
+    )
+    # PENDING_MANUAL is a governed outcome, not an execution error: the
+    # caller receives a structured handoff instead of a silent degrade.
+    return {
+        "status": result.status,
+        "text": result.text,
+        "provider": result.provider,
+        "model": result.model,
+        "latency_ms": result.latency_ms,
+        "reason": result.reason,
+        "attempts": result.attempts,
+    }

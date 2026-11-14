@@ -137,6 +137,17 @@ The platform supports seamless switching between unified cloud staging and dedic
 | **Local Heavy Tools** | `allow_local_openhands=FALSE`, `allow_local_playwright=FALSE`, `allow_self_hosted_n8n=FALSE` | `allow_local_openhands=TRUE`, `allow_local_playwright=TRUE`, `allow_self_hosted_n8n=TRUE` |
 | **Active Domain** | `aknja.pp.ua` | `aknja.in` (Live switchable via `/admin/settings`) |
 
+> **ERRATUM (2026-11-14) — staging compute host.** Hugging Face moved Docker
+> and Gradio Spaces to paid plans (PRO/Team/Enterprise); only Static Spaces
+> remain free (huggingface.co/docs/hub/en/spaces-overview). The
+> `UNIFIED_STAGING_HF_NEON` staging host is therefore **no longer a
+> zero-cost option** and is withdrawn from the free hosting pool
+> (docs/34). Free staging now runs on the Oracle Cloud Always-Free ARM
+> tenancy (same A1 baseline as production, a smaller shape) with Neon +
+> Cloudflare R2 unchanged; Hugging Face remains in the pool only as a
+> serverless inference candidate. The `infrastructure_runtime_profile`
+> switching mechanism is unaffected.
+
 ### 2.2 Domain & Master Alias Propagation
 When `public_domain` is updated in `system_settings` (e.g., from `aknja.pp.ua` to `aknja.in`), the system automatically updates:
 * Client portal URLs, webhook callback URLs, and SEO canonical/sitemap links.

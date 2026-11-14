@@ -6,7 +6,8 @@ Rules under test:
 - `verify-provider` records evidence, flips to FREE_VERIFIED and only then
   can the pool admit usage;
 - re-running the candidate seed never flips an already-verified account back;
-- doc-sourced additions (Colab, Modal, HF Spaces, Jina, CF Pages) are present;
+- doc-sourced additions (Colab, Modal, Jina, CF Pages) are present and
+  Hugging Face is inference-only (Spaces Docker hosting withdrawn);
 - web-researched watchlist entries carry research provenance (doc 34).
 """
 
@@ -40,7 +41,7 @@ def test_candidate_pool_covers_all_documented_categories(db, seed) -> None:
 
 
 def test_doc_sourced_additions_present_with_docs_provenance(db, seed) -> None:
-    """Colab, Modal, CF Pages, Jina (doc-sourced) + HF Spaces hosting product."""
+    """Colab, Modal, CF Pages, Jina (doc-sourced); HF is inference-only now."""
     register_candidate_providers(db, seed.tenant.id)
     db.commit()
     by_provider = {
@@ -50,15 +51,17 @@ def test_doc_sourced_additions_present_with_docs_provenance(db, seed) -> None:
         assert name in by_provider, f"{name} missing from candidate pool"
         assert by_provider[name].billing_state == BillingState.FREE_UNVERIFIED.value
 
-    products = (
+    # HF Spaces Docker hosting was withdrawn from the free tier (2026-07):
+    # the huggingface account must carry ONLY the inference product.
+    hf_products = (
         db.query(ProviderProduct)
         .join(ProviderAccount, ProviderProduct.account_id == ProviderAccount.id)
         .filter(ProviderAccount.provider == "huggingface")
         .all()
     )
-    spaces = next(p for p in products if p.product_key == "hf spaces hosting")
-    assert spaces.category == ProviderCategory.HOSTING_COMPUTE.value  # per-product override
-    assert spaces.capability_contract["provenance"] == "docs"
+    assert [p.product_key for p in hf_products] == ["hf serverless inference"]
+    assert all(p.category == ProviderCategory.AI_LLM.value for p in hf_products)
+    assert "NOT a free hosting option" in hf_products[0].capability_contract["provider_note"]
 
     colab = next(
         p
