@@ -179,3 +179,16 @@ Test the channel, then drain due notifications (send/retry per docs/39):
 Hooks that enqueue: approval.requested, quota.hard_stop (per product per
 UTC day), run.blocked (AI run parked for founder review). Language follows
 the `default_admin_language` setting (ml|en).
+
+## 13. LLM provider quality benchmark (v5.3.2 §6, T-008)
+
+Benchmark one verified provider across all seven task profiles and four
+languages (36 scenarios; each consumes one quota unit):
+
+    python -m app.cli run-llm-benchmark --provider groq
+    python -m app.cli run-llm-benchmark --provider groq --tasks classification,translation --languages ml,en
+
+Exit 0 only if every selected task meets its quality floor. A FAILED run
+records a durable benchmark row and the inference layer then skips the
+provider for the failed tasks until a passing re-run (fresh window: 30
+days). Failed runs also enqueue a founder Telegram alert.

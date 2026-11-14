@@ -34,3 +34,23 @@ Provider candidates such as OCI, GitHub, Google Cloud, AWS, Colab, Kaggle, Cloud
   `process-notifications`; last verified: not yet (token unset)
 - Fallback: rows stay PENDING while unconfigured — no fallback channel;
   email outbox remains a separate mechanism
+
+## LLM provider quality benchmark (v5.3.2 §5C/§6, integrated 2026-11-14)
+
+- Benchmark version: v1 — 36 scenarios; all 7 task profiles
+  (classification, translation, summarization, requirements, code_review,
+  proposal_draft, qa_review) in Malayalam, English, Hindi and Tamil.
+- Scoring (deterministic, code-only): JSON/schema validity, label match
+  against golden answers, named-entity preservation, target-script
+  check, key-fact coverage, length bounds, required sections, latency.
+- Quality floors: classification and translation 1.0; generative tasks
+  0.75 (one weak language of four tolerated). §6: a provider below the
+  floor is NOT eligible for that task — the inference layer enforces
+  this via the benchmark gate (fresh failed benchmarks only; >30 days =
+  stale, re-run; tasks not covered by the benchmark stay eligible).
+- Records: one `provider_quality_benchmarks` row per run (score_json with
+  per-task/per-language detail and per-scenario failed checks);
+  failed runs alert the founder (docs/39 outbox).
+- Run: `python -m app.cli run-llm-benchmark --provider <name>` (optionally
+  `--tasks`, `--languages`); exit 0 only if every selected task meets
+  its floor.

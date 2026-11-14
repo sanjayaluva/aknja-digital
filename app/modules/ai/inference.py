@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.enums import ProviderCategory
 from app.core.security import canonical_payload_hash
+from app.modules.ai.benchmark import benchmark_gate
 from app.modules.ai.models import LLMCallLog
 from app.modules.governance.service import record_audit
 from app.modules.resources.models import ProviderAccount, ProviderProduct
@@ -328,6 +329,22 @@ def llm_complete(
 
             product = db.get(ProviderProduct, decision.provider_product_id)
             account = db.get(ProviderAccount, product.account_id)
+            # v5.3.2 §6 quality floor: a provider whose latest fresh benchmark
+            # failed this task is not eligible for it — skip and fail over.
+            gate_reason = benchmark_gate(db, product.id, task)
+            if gate_reason:
+                reason = f"{account.provider}: {gate_reason}"
+                result.attempts.append(
+                    {"provider": account.provider, "status": "SKIPPED", "reason": reason}
+                )
+                result.reason = reason
+                record_audit(
+                    db, tenant_id=tenant_id, actor_type="SYSTEM", actor_id="llm-gateway",
+                    action="llm.skipped", resource_type="provider_product",
+                    resource_id=str(product.id), payload={"reason": reason, "task": task},
+                )
+                exclude.append(product.id)
+                continue
             adapter = ADAPTERS.get(account.provider)
             api_key = _provider_key(account.provider, settings)
             if adapter is None or not api_key:

@@ -218,3 +218,30 @@ class ProviderPool(Base, TimestampMixin):
     min_quality_threshold: Mapped[Numeric] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     failover_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class ProviderQualityBenchmark(Base, TimestampMixin):
+    """Latest-vs-history quality benchmark record (v5.3.2 §7).
+
+    One row per benchmark run: which provider product, which tasks and
+    languages, the per-task scores against the floors, and the pass verdict.
+    The inference gate (`benchmark_gate`) reads the newest fresh row to keep
+    floor-failing providers out of the pool for the tasks they failed.
+    """
+
+    __tablename__ = "provider_quality_benchmarks"
+    __table_args__ = (
+        Index("ix_pqb_product_evaluated", "provider_product_id", "evaluated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_products.id"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    benchmark_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    tasks: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    languages: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    score_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

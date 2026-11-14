@@ -513,6 +513,54 @@ def cmd_send_test_notification(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_run_llm_benchmark(args: argparse.Namespace) -> int:
+    """Run the v5.3.2 §6 quality benchmark against one provider (no failover).
+
+    Exit 0 only if every selected task meets its quality floor; a failed run
+    records a FAILED benchmark row which the inference gate then enforces
+    (the provider stops being eligible for the failed tasks until re-run).
+    """
+    db = get_session_local()()
+    try:
+        from app.core.errors import ConflictError
+        from app.modules.ai.benchmark import run_benchmark
+        from app.modules.identity.service import bootstrap_internal_tenant
+
+        tenant = bootstrap_internal_tenant(db)
+        tasks = [t.strip() for t in args.tasks.split(",")] if args.tasks else None
+        languages = [l.strip() for l in args.languages.split(",")] if args.languages else None
+        card = run_benchmark(
+            db, tenant_id=tenant.id, provider=args.provider,
+            tasks=tasks, languages=languages,
+        )
+        db.commit()
+        print(f"benchmark {card['benchmark_version']} — provider '{card['provider']}' "
+              f"({card['scenarios']} scenarios, tasks: {', '.join(card['tasks'])})")
+        for task, entry in card["per_task"].items():
+            verdict = "PASS" if entry["passed"] else "FAIL"
+            print(f"  {task:<16} {entry['score']:.0%} (floor {entry['floor']:.0%}) "
+                  f"{verdict}  [{entry['scenarios']} scenarios]")
+        for lang, entry in card["per_language"].items():
+            print(f"  lang {lang}: {entry['score']:.0%} over {entry['scenarios']} scenarios")
+        print(f"overall: {card['overall_score']:.0%} — "
+              f"{'PASSED' if card['passed'] else 'FAILED'} "
+              f"(record {card['record_id']})")
+        if not card["passed"]:
+            print("the inference layer now skips this provider for the failed tasks "
+                  "until a passing re-run (v5.3.2 §6)")
+        return 0 if card["passed"] else 1
+    except ConflictError as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aknja", description="Aknja Digital management CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -556,6 +604,15 @@ def main(argv: list[str] | None = None) -> int:
         "send-test-notification", help="enqueue and deliver a test Telegram message"
     )
     p_note.add_argument("--language", default=None, help="ml (default) or en")
+    p_bench = sub.add_parser(
+        "run-llm-benchmark",
+        help="run the v5.3.2 §6 quality benchmark (ml/en/hi/ta) against one provider",
+    )
+    p_bench.add_argument("--provider", required=True, help="provider key, e.g. groq")
+    p_bench.add_argument("--tasks", default=None,
+                         help="comma-separated task profiles (default: all seven)")
+    p_bench.add_argument("--languages", default=None,
+                         help="comma-separated languages (default: ml,en,hi,ta)")
     args = parser.parse_args(argv)
 
     get_settings()  # load config eagerly for clear failure
@@ -571,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
         "llm-ping": cmd_llm_ping,
         "process-notifications": cmd_process_notifications,
         "send-test-notification": cmd_send_test_notification,
+        "run-llm-benchmark": cmd_run_llm_benchmark,
     }
     return handlers[args.command](args)
 

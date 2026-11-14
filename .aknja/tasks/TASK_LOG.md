@@ -72,6 +72,34 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   gateway `allowed_data_classes` enforcement gap found by tests and fixed
 - failure_reason: —
 
+## T-008 — LLM quality benchmark runner + §6 inference gate (this round)
+
+- task_id: T-008 · capability: software_engineer
+- goal: implement the v5.3.2 §5C/§6 quality-preservation loop for the free
+  LLM pool — benchmark prompts with golden expectations for ml/en/hi/ta,
+  deterministic scoring against per-task floors, durable benchmark
+  records (§7) and an eligibility gate in the inference layer.
+- inputs: docs/source_provider_pools_v5.3.2.md §5C/§6/§7, TASK_PROFILES
+- data_classification: INTERNAL · dependencies: T-005 (inference), T-006 (alerts)
+- acceptance_criteria: versioned 36-scenario bank covering all 7 task
+  profiles in all 4 languages; deterministic evaluators (JSON/schema
+  validity, label match, entity+script preservation, key facts, length
+  bounds, sections); per-task floors (classification/translation 1.0,
+  generative 0.75); one provider_quality_benchmarks row per run; a
+  failed fresh benchmark blocks the provider for the failed tasks only
+  (passed / stale >30d / unbenchmarked / uncovered task = eligible);
+  founder alert on failure; CLI run-llm-benchmark with honest exit code.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `app/modules/ai/benchmark.py` (bank + evaluators + runner +
+  gate), `ProviderQualityBenchmark` model + migration `d8e3f6a7c2b4`
+  (roundtrip-verified), gate hook in `inference.py`, `benchmark.failed`
+  template, CLI `run-llm-benchmark`, `tests/test_benchmark.py` (16)
+- verification_evidence: 132 tests passing, lint clean; CLI evidence run
+  with real egress (groq, dummy token): HTTP 403 recorded per scenario,
+  FAILED verdict, exit 1, durable row + Malayalam founder alert queued
+- failure_reason: —
+
 ## T-006 — Telegram notification outbox (docs/39 reliability, this round)
 
 - task_id: T-006 · capability: software_engineer
@@ -120,5 +148,4 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
 ## Open items (next rounds)
 
 - T-007 (candidate): Playwright E2E + visual comparison (docs/16)
-- T-008 (candidate): benchmark runner for ml/en/hi/ta quality floors (v5.3.2 §6)
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

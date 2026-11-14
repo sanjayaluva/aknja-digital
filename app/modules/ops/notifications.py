@@ -58,6 +58,12 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "ml": "AI റൺ തടഞ്ഞു: {objective}\nകാരണം: {reason}\nറൺ: {run_id}",
         "en": "AI run parked for review: {objective}\nReason: {reason}\nRun: {run_id}",
     },
+    "benchmark.failed": {
+        "ml": "ക്വാളിറ്റി ബെഞ്ച്മാർക്ക് പരാജയപ്പെട്ടു: {provider}\nപരാജയപ്പെട്ട ടാസ്ക്കുകൾ: "
+              "{failed_tasks}\nസ്കോർ: {overall_score}",
+        "en": "Quality benchmark FAILED: {provider}\nFailed tasks: {failed_tasks}\n"
+              "Score: {overall_score}",
+    },
     "system.test": {
         "ml": "ടെസ്റ്റ് സന്ദേശം — ടെലിഗ്രാം ചാനൽ സജ്ജമാണ്.",
         "en": "Test message — the Telegram channel is configured and working.",
