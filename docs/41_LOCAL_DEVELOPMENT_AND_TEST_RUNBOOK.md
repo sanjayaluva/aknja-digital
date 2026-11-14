@@ -118,3 +118,11 @@ that is the intended zero-cost behaviour, not a bug. Verification is audited
 resets an already-verified account. Privacy note: the free Gemini tier uses
 content for training — confidential client data must never be routed there
 (v5.3.2 §5C); the registry metadata carries this warning.
+
+The pool includes the doc-sourced services (SRS §7/§8.4, docs/33, docs/14 —
+Neon, Supabase, R2, Tigris, B2, OCI, Gemini, Groq, Cerebras, OpenRouter,
+Mistral, HF, Brevo, Resend, MailerSend, Upstash, Azure Speech, Sarvam,
+OCI A1, GitHub Actions, Kaggle, **Colab, Modal, HF Spaces, Cloudflare
+Pages, Jina**) plus the web-researched watchlist of `docs/34_FREE_SERVICE_CANDIDATE_WATCHLIST.md`
+(Workers AI, GitHub Models, UptimeRobot, Better Stack, Brave Search, Tavily,
+Redis Cloud — researched 2026-11-14, provenance recorded per entry).

@@ -186,6 +186,9 @@ CANDIDATE_PROVIDERS: list[dict] = [
         "products": [
             ("hf serverless inference", "requests", "requests", "DAILY", "unknown",
              "verify model availability and limits"),
+            ("hf spaces hosting", "spaces", "spaces", "MONTHLY", "unknown",
+             "free static Spaces vs paid compute hardware — verify plan",
+             ProviderCategory.HOSTING_COMPUTE),
         ],
     },
     # --- D. Transactional email pool (v5.3.2 §5D) --------------------------
@@ -309,6 +312,184 @@ CANDIDATE_PROVIDERS: list[dict] = [
              "verify current weekly GPU quota"),
         ],
     },
+    # --- Doc-sourced additions (SRS §7/§8.4, docs/33, docs/14) --------------
+    {
+        "provider": "colab",
+        "source": "docs",
+        "category": ProviderCategory.HOSTING_COMPUTE,
+        "display_name": "Google Colab (opportunistic GPU)",
+        "secret_ref": "Google account (no API key; interactive use only)",
+        "docs_url": "",
+        "note": "SRS §7: 'Colab/Kaggle are opportunistic batch compute, not durable "
+        "production hosting.' Interactive/best-effort GPU sessions; no durable "
+        "service guarantee; checkpoint jobs (docs/33, docs/14). Layer-4 target of "
+        "gpu_checkpoint_interval_min alongside Kaggle/Modal.",
+        "products": [
+            ("colab gpu quota", "gpu_hours", "GPU-hours", "DAILY", "unknown",
+             "verify current free-tier GPU session policy"),
+        ],
+    },
+    {
+        "provider": "modal",
+        "source": "docs",
+        "category": ProviderCategory.HOSTING_COMPUTE,
+        "display_name": "Modal.com (free credits)",
+        "secret_ref": "MODAL_TOKEN_ID / MODAL_TOKEN_SECRET",
+        "docs_url": "",
+        "note": "SRS §8.4 Layer-4 offload target. WARNING (docs/33): do not rely on "
+        "trial credits as perpetual free — treat credits as one-time and verify "
+        "current terms before any workload depends on them.",
+        "products": [
+            ("modal free credits", "credits", "credits", "ONE_TIME", "unknown",
+             "one-time credits, not a recurring allowance"),
+        ],
+    },
+    {
+        "provider": "cloudflare_pages",
+        "source": "docs",
+        "category": ProviderCategory.HOSTING_COMPUTE,
+        "display_name": "Cloudflare Pages (static hosting)",
+        "secret_ref": "CLOUDFLARE_API_TOKEN",
+        "docs_url": "",
+        "note": "docs/33: 'Cloudflare Pages/R2: verify limits, account billing "
+        "behavior and current plan.' Candidate for static portal/landing hosting.",
+        "products": [
+            ("cf pages builds", "builds", "builds", "MONTHLY", "unknown",
+             "verify build and bandwidth limits"),
+        ],
+    },
+    {
+        "provider": "jina",
+        "source": "docs",
+        "category": ProviderCategory.SEARCH,
+        "display_name": "Jina Reader (rate-limited ingestion)",
+        "secret_ref": "JINA_API_KEY",
+        "docs_url": "",
+        "note": "SRS anti-ban guard: read-only ingestion via official RSS/APIs and "
+        "rate-limited Jina Reader endpoints; automated form-filling/bot-bidding is "
+        "architecturally blocked.",
+        "products": [
+            ("jina reader requests", "requests", "requests", "DAILY", "unknown",
+             "verify free rate limits without key / with key"),
+        ],
+    },
+    # huggingface gains a Spaces hosting product (SRS staging profile
+    # UNIFIED_STAGING_HF_NEON runs on an HF Docker Space) — added below in the
+    # huggingface entry via the per-product category override.
+
+    # =====================================================================
+    # WATCHLIST — web-researched 2026-11-14, NOT in the source docs.
+    # Free tiers verified against public pricing pages via search; they are
+    # observations with a research date, not entitlements. Same rule as the
+    # doc-sourced pool: verify in the actual account before enabling.
+    # =====================================================================
+    {
+        "provider": "cloudflare_workers_ai",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.AI_LLM,
+        "display_name": "Cloudflare Workers AI (free allocation)",
+        "secret_ref": "CLOUDFLARE_API_TOKEN",
+        "docs_url": "https://developers.cloudflare.com/workers-ai/platform/pricing",
+        "note": "Research 2026-11-14: 10,000 Neurons/day free allocation, shared "
+        "across models, resets 00:00 UTC; $0.011/1k Neurons beyond. Edge inference "
+        "with REST API — fits the provider-neutral LLM gateway as another Layer-1 "
+        "member behind the same Cloudflare account as R2.",
+        "products": [
+            ("workers-ai free neurons", "neurons", "neurons", "DAILY",
+             "10,000 Neurons/day", "free allocation per pricing page"),
+        ],
+    },
+    {
+        "provider": "github_models",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.AI_LLM,
+        "display_name": "GitHub Models (free prototyping tier)",
+        "secret_ref": "GITHUB_APP_ID / GITHUB_PRIVATE_KEY_SECRET_REF (same app)",
+        "docs_url": "https://docs.github.com/en/github-models",
+        "note": "Research 2026-11-14: free tier with per-minute and per-day request "
+        "and token caps — explicitly a testing allowance, not a production tier. "
+        "Natural fit: the platform already holds a GitHub App; no new account "
+        "needed if the same org owns it.",
+        "products": [
+            ("github models free tier", "requests", "requests", "DAILY", "unknown",
+             "per-model per-minute/per-day caps — verify for chosen models"),
+        ],
+    },
+    {
+        "provider": "uptimerobot",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.MONITORING_ANALYTICS,
+        "display_name": "UptimeRobot (free monitors)",
+        "secret_ref": "UPTIMEROBOT_API_KEY",
+        "docs_url": "https://uptimerobot.com/pricing",
+        "note": "Research 2026-11-14: free plan ~50 monitors with 5-minute "
+        "intervals. External uptime signal for /healthz. v5.3.2 §5G still applies: "
+        "security audit events stay in the application DB, never only here.",
+        "products": [
+            ("uptimerobot free monitors", "monitors", "monitors", "MONTHLY",
+             "50 monitors", "free plan per pricing page"),
+        ],
+    },
+    {
+        "provider": "better_stack",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.MONITORING_ANALYTICS,
+        "display_name": "Better Stack (free monitoring)",
+        "secret_ref": "BETTER_STACK_URL (inbound webhook/heartsbeat)",
+        "docs_url": "https://betterstack.com/pricing",
+        "note": "Research 2026-11-14: free tier ~10 monitors, 3-minute checks, one "
+        "status page. Alternative to UptimeRobot in the monitoring pool; audit "
+        "events remain in the application DB (v5.3.2 §5G).",
+        "products": [
+            ("better stack free monitors", "monitors", "monitors", "MONTHLY",
+             "10 monitors", "free tier per pricing page"),
+        ],
+    },
+    {
+        "provider": "brave_search",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.SEARCH,
+        "display_name": "Brave Search API (free monthly credits)",
+        "secret_ref": "BRAVE_SEARCH_API_KEY",
+        "docs_url": "https://brave.com/search/api",
+        "note": "Research 2026-11-14: $5 free credits per month (~2,000 basic "
+        "queries/month equivalent per current docs). For lead-radar market "
+        "research; respect the anti-ban guard (read-only, rate-limited).",
+        "products": [
+            ("brave search free credits", "queries", "queries", "MONTHLY",
+             "$5 monthly credit (~2,000 queries)", "credits auto-applied monthly"),
+        ],
+    },
+    {
+        "provider": "tavily",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.SEARCH,
+        "display_name": "Tavily (free research API credits)",
+        "secret_ref": "TAVILY_API_KEY",
+        "docs_url": "https://www.tavily.com",
+        "note": "Research 2026-11-14: 1,000 free API credits per month, no credit "
+        "card. LLM-oriented research endpoint — complements Jina Reader for the "
+        "lead-radar and briefing pipelines.",
+        "products": [
+            ("tavily free credits", "credits", "credits", "MONTHLY",
+             "1,000 credits/month", "no card required"),
+        ],
+    },
+    {
+        "provider": "redis_cloud",
+        "source": "web:2026-11-14",
+        "category": ProviderCategory.CACHE_QUEUE,
+        "display_name": "Redis Cloud (free Essentials database)",
+        "secret_ref": "REDIS_URL (redis.cloud endpoint)",
+        "docs_url": "https://redis.io/pricing",
+        "note": "Research 2026-11-14: free 30 MB Essentials database, 100 "
+        "ops/sec cap, 30 concurrent connections, no credit card. Second member of "
+        "the cache pool after Upstash (v5.3.2 §5E); cache stays disposable.",
+        "products": [
+            ("redis cloud free", "commands", "commands", "MONTHLY",
+             "30 MB / 100 ops per sec", "ops cap and connection limit apply"),
+        ],
+    },
 ]
 
 
@@ -344,7 +525,11 @@ def register_candidate_providers(db: Session, tenant_id: uuid.UUID) -> dict[str,
             stats["accounts"] += 1
         # Keep metadata fresh on re-runs without flipping verification state.
         account.data_policy_url = candidate["docs_url"] or account.data_policy_url
-        for key, metric, unit, reset, documented, doc_note in candidate["products"]:
+        for spec in candidate["products"]:
+            key, metric, unit, reset, documented, doc_note = spec[:6]
+            # Optional 7th element overrides the account-level category
+            # (e.g. HF Spaces is hosting while the account is AI/LLM).
+            category = spec[6].value if len(spec) > 6 else candidate["category"].value
             product = db.scalar(
                 select(ProviderProduct).where(
                     ProviderProduct.account_id == account.id,
@@ -358,9 +543,10 @@ def register_candidate_providers(db: Session, tenant_id: uuid.UUID) -> dict[str,
                 ProviderProduct(
                     account_id=account.id,
                     product_key=key,
-                    category=candidate["category"].value,
+                    category=category,
                     capability_contract={
                         "candidate": True,
+                        "provenance": candidate.get("source", "docs"),
                         "documented_allowance": documented,
                         "documented_note": doc_note,
                         "provider_note": candidate["note"],

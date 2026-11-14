@@ -1,11 +1,13 @@
-"""Free-tier candidate provider workflow tests (docs/33, v5.3.2, SRS §9).
+"""Free-tier candidate provider workflow tests (docs/33, v5.3.2, SRS §9, doc 34).
 
 Rules under test:
 - the documented candidate pool seeds as FREE_UNVERIFIED + disabled;
 - unverified candidates are NEVER admitted by the quota engine (fail closed);
 - `verify-provider` records evidence, flips to FREE_VERIFIED and only then
   can the pool admit usage;
-- re-running the candidate seed never flips an already-verified account back.
+- re-running the candidate seed never flips an already-verified account back;
+- doc-sourced additions (Colab, Modal, HF Spaces, Jina, CF Pages) are present;
+- web-researched watchlist entries carry research provenance (doc 34).
 """
 
 from __future__ import annotations
@@ -32,7 +34,69 @@ def test_candidate_pool_covers_all_documented_categories(db, seed) -> None:
         ProviderCategory.CACHE_QUEUE.value,
         ProviderCategory.SPEECH.value,
         ProviderCategory.HOSTING_COMPUTE.value,
+        ProviderCategory.SEARCH.value,
+        ProviderCategory.MONITORING_ANALYTICS.value,
     }
+
+
+def test_doc_sourced_additions_present_with_docs_provenance(db, seed) -> None:
+    """Colab, Modal, CF Pages, Jina (doc-sourced) + HF Spaces hosting product."""
+    register_candidate_providers(db, seed.tenant.id)
+    db.commit()
+    by_provider = {
+        a.provider: a for a in db.query(ProviderAccount).all()
+    }
+    for name in ("colab", "modal", "cloudflare_pages", "jina", "huggingface"):
+        assert name in by_provider, f"{name} missing from candidate pool"
+        assert by_provider[name].billing_state == BillingState.FREE_UNVERIFIED.value
+
+    products = (
+        db.query(ProviderProduct)
+        .join(ProviderAccount, ProviderProduct.account_id == ProviderAccount.id)
+        .filter(ProviderAccount.provider == "huggingface")
+        .all()
+    )
+    spaces = next(p for p in products if p.product_key == "hf spaces hosting")
+    assert spaces.category == ProviderCategory.HOSTING_COMPUTE.value  # per-product override
+    assert spaces.capability_contract["provenance"] == "docs"
+
+    colab = next(
+        p
+        for p in db.query(ProviderProduct).join(
+            ProviderAccount, ProviderProduct.account_id == ProviderAccount.id
+        ).filter(ProviderAccount.provider == "colab").all()
+    )
+    assert colab.capability_contract["provenance"] == "docs"
+    assert "opportunistic" in colab.capability_contract["provider_note"]
+
+
+def test_watchlist_entries_carry_research_provenance(db, seed) -> None:
+    """Web-researched candidates (doc 34) are tagged with the research date."""
+    register_candidate_providers(db, seed.tenant.id)
+    db.commit()
+    watchlist = {"cloudflare_workers_ai", "github_models", "uptimerobot",
+                 "better_stack", "brave_search", "tavily", "redis_cloud"}
+    rows = (
+        db.query(ProviderAccount)
+        .filter(ProviderAccount.provider.in_(watchlist))
+        .all()
+    )
+    assert {r.provider for r in rows} == watchlist
+    for row in rows:
+        assert row.billing_state == BillingState.FREE_UNVERIFIED.value
+        assert row.enabled is False
+    contract = (
+        db.query(ProviderProduct)
+        .join(ProviderAccount, ProviderProduct.account_id == ProviderAccount.id)
+        .filter(ProviderAccount.provider == "cloudflare_workers_ai")
+        .one()
+        .capability_contract
+    )
+    assert contract["provenance"] == "web:2026-11-14"
+    assert contract["documented_allowance"] == "10,000 Neurons/day"
+    assert contract["docs_url"] == (
+        "https://developers.cloudflare.com/workers-ai/platform/pricing"
+    )
 
 
 def test_candidates_seed_unverified_disabled_and_fail_closed(db, seed) -> None:
