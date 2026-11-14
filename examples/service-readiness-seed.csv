@@ -1,0 +1,18 @@
+service_family,availability_status,readiness_status,execution_mode,notes
+Web Application Development,CATALOG_ONLY,PLANNED,AI_ASSISTED,Start with a controlled web project vertical slice
+Mobile Application Development,CATALOG_ONLY,PLANNED,MANUAL,SDK signing accounts and device tests required
+Desktop Application Development,CATALOG_ONLY,PLANNED,MANUAL,Platform-specific toolchains required
+Cloud DevOps,CATALOG_ONLY,PLANNED,AI_ASSISTED,Use authorized infrastructure and capacity gates
+Database Engineering,CATALOG_ONLY,PLANNED,AI_ASSISTED,Data migration and backup evidence required
+AI ML Automation,CATALOG_ONLY,PLANNED,SEMI_AUTONOMOUS,Provider quota and privacy checks required
+IoT Embedded,CATALOG_ONLY,PLANNED,MANUAL,Physical device/hardware validation required
+Scraping RPA,CATALOG_ONLY,PLANNED,AI_ASSISTED,Authorized access only; no anti-bot bypass
+Cybersecurity,CATALOG_ONLY,PLANNED,MANUAL,Written authorization and scoped testing required
+QA Testing,CATALOG_ONLY,PLANNED,AI_ASSISTED,Independent evidence required
+SEO,CATALOG_ONLY,PLANNED,AI_ASSISTED,No ranking guarantees
+Content Creative,CATALOG_ONLY,PLANNED,AI_ASSISTED,Asset rights and human review required
+Social Media,CATALOG_ONLY,PLANNED,AI_ASSISTED,Official APIs and client approval required
+Paid Advertising,CATALOG_ONLY,PLANNED,AUTONOMOUS_WITH_APPROVAL,Paused until client budget and launch approval
+Messaging Email,CATALOG_ONLY,PLANNED,AI_ASSISTED,Consent and official provider required
+CRO Analytics,CATALOG_ONLY,PLANNED,AI_ASSISTED,Consent-aware analytics required
+ORM PR Affiliate,CATALOG_ONLY,PLANNED,MANUAL,Truthful claims and partner authorization required
