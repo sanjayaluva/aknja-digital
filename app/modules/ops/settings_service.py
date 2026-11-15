@@ -72,6 +72,13 @@ SEEDED_SETTINGS: list[tuple[str, str, Any, str, str]] = [
     ("client_kyc_reminder_interval_hours", "sdlc", 24, "int", "Reminder cadence for BLOCKED_ON_CLIENT_KYC projects"),
     ("dmlc_ab_evaluation_window_days", "sdlc", 5, "int", "Ad creative A/B evaluation duration"),
     ("whatsapp_daily_warmup_limit", "sdlc", 50, "int", "Max daily outbound WhatsApp messages"),
+    # Tab 8 — Operations & Recovery (v5.3.2 §5A, docs/22)
+    ("maintenance_mode_enabled", "ops_recovery", False, "bool",
+     "Write freeze: when true the app serves read-only (controlled promotion / quota exhaustion)"),
+    ("maintenance_reason", "ops_recovery", "", "string",
+     "Shown in 503 responses and the founder notification when maintenance mode activates"),
+    ("backup_max_age_hours", "ops_recovery", 26, "int",
+     "Freshness SLO for the newest backup (backup verify --max-age monitors this)"),
 ]
 
 # Settings that must never be user-editable at runtime (protected names).

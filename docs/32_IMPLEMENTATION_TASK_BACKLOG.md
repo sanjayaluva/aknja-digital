@@ -17,5 +17,5 @@ E1 ✅ capability registry; E2 ✅ orchestrator state machine (+ LLM steps); E3 
 F1 ✅ provider registry; F2 ✅ usage ledger; F3 ✅ quota snapshot; F4 ✅ atomic reservation; F5 ✅ hard stop; F6 ✅ category failover.
 ## Epic G — QA/staging — ◐ MOSTLY (G1 runner partial: needs Docker host; G2/G3 done T-007)
 G1 ◐ workspace runner (models/lifecycle in, provisioning needs a Docker host); G2 ✅ Playwright (real-browser E2E, T-007: 11 flow tests); G3 ✅ visual evidence (8 committed baselines, 0.2% tolerance, T-007); G4 ○ Compose environment manager; G5 ○ cleanup safety.
-## Epic H — Production — ○ SPECIFIED, NOT DEPLOYED
-H1 ○ host inventory; H2 ○ capacity manager; H3 ○ reverse proxy; H4 ○ deployment approvals; H5 ○ backups; H6 ◐ monitoring/incidents (Telegram admin notification outbox ✅ T-006; alert automation ongoing); H7 ○ maintenance billing. Requires capacity admission + drills per docs/19, docs/38; staging hosting rebased to OCI Always-Free ARM (SRS §2.1 erratum).
+## Epic H — Production — ◐ PLATFORM-READY, NOT DEPLOYED (H5 done T-010)
+H1 ○ host inventory; H2 ○ capacity manager; H3 ○ reverse proxy; H4 ○ deployment approvals; H5 ✅ backups (backup create/verify/drill/prune + maintenance write-freeze, T-010, docs/22); H6 ◐ monitoring/incidents (outbox ✅ T-006; backup freshness + maintenance notifications ✅ T-010; alert automation ongoing); H7 ○ maintenance billing. Requires capacity admission + drills per docs/19, docs/38; staging hosting rebased to OCI Always-Free ARM (SRS §2.1 erratum).

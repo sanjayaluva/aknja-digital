@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     object_storage_access_key_id: str = ""
     object_storage_secret_access_key: SecretStr = SecretStr("")
 
+    # --- Backup & recovery (v5.3.2 §5A, docs/22) ---
+    backup_dir: str = "var/backups"
+    pg_bin_dir: str = ""  # empty: auto-discover (pgserver bundle, then PATH)
+
     # --- Optional integrations (disabled until verified per SRS §14) ---
     ai_provider_enabled: bool = False
     telegram_bot_token: SecretStr = SecretStr("")

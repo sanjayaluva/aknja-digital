@@ -22,12 +22,12 @@ Evidence rule (unchanged): a status changes only with tests, commands and their 
 | Audit ledger | IMPLEMENTED + TESTED | Hash-chained, content-recomputing verification; DB-level append-only trigger (UPDATE/DELETE raise); tamper detection test |
 | Admin UI + client portal | IMPLEMENTED | 12 admin screens + portal (projects, milestones, staging previews, feedback, UAT, invoices); server-rendered HTMX/Alpine; `tests/test_ui.py` (18 tests) |
 | Project workspace/staging | PARTIAL | Preview-link lifecycle, evidence and cleanup models implemented; Compose-based staging provisioning requires a Docker host (design in docs/15) |
-| Production hosting | SPECIFIED, OPTIONAL | Not deployed. Requires capacity admission, backup/restore drills and contract per docs/19, docs/38 |
-| QA/visual verification | DONE | 153 tests passing in one command (unit/integration/contract + 11 Playwright E2E flows + 8 visual baselines with 0.2% pixel-diff tolerance) against real PostgreSQL 16; E2E layer found and fixed six ship-blocking UI bugs (login form serialization, 422→500 handler crash, principal/CSRF wiring, audit NULL-tenant visibility, logout redirect, unstable row ordering) |
+| Production hosting | SPECIFIED, OPTIONAL | Not deployed. Requires capacity admission and contract per docs/19, docs/38. Backup/restore drills + maintenance write-freeze are IMPLEMENTED and testable (T-010: aknja backup create/verify/drill/prune, aknja maintenance on/off — docs/22) |
+| QA/visual verification | DONE | 160 tests passing in one command (unit/integration/contract + 11 Playwright E2E flows + 8 visual baselines with 0.2% pixel-diff tolerance) against real PostgreSQL 16; E2E layer found and fixed six ship-blocking UI bugs (login form serialization, 422→500 handler crash, principal/CSRF wiring, audit NULL-tenant visibility, logout redirect, unstable row ordering) |
 | Client portal UAT workflow | IMPLEMENTED + TESTED | Portal tests in `tests/test_ui.py`, `tests/test_auth_rbac.py` |
-| Production incident automation | SPECIFIED | Incident/support/backup models + UI-ready; automation deferred (docs/20) |
+| Production incident automation | SPECIFIED | Incident/support models + UI-ready; automation deferred (docs/20) |
 
-**Test suite:** 153 tests, all passing (`pytest -q`), including concurrency tests against real PostgreSQL, 11 real-browser Playwright E2E flows and 8 visual-baseline comparisons (skips cleanly without Chromium; `AKNJA_E2E=skip` to disable). Lint: `ruff check app tests` clean.
+**Test suite:** 160 tests, all passing (`pytest -q`), including concurrency tests against real PostgreSQL, 11 real-browser Playwright E2E flows and 8 visual-baseline comparisons (skips cleanly without Chromium; `AKNJA_E2E=skip` to disable). Lint: `ruff check app tests` clean.
 
 **Hosting plan change (2026-11-14):** Hugging Face Spaces Docker/Gradio hosting moved to paid plans; withdrawn from the free pool (SRS §2.1 erratum, docs/34). Free staging rebases onto OCI Always-Free ARM; Hugging Face remains only as a serverless inference candidate.
 

@@ -172,6 +172,36 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   comparator sensitivity verified (synthetic 5.86% change caught)
 - failure_reason: —
 
+## T-010 — Backup/restore + maintenance mode (this round)
+
+- task_id: T-010 · capability: software_engineer
+- goal: implement the v5.3.2 §5A required-architecture items "Database
+  backup and tested restore" and "Write freeze / maintenance mode during a
+  controlled promotion" (backlog H5), per docs/22 semantics.
+- inputs: v5.3.2 §5A, v5.3.1 L141 (quota exhaustion -> read-only mode),
+  docs/22, docs/32 Epic H
+- acceptance_criteria: pg_dump artifacts with checksummed manifests; restore
+  drill to an ISOLATED scratch DB verifying counts/schema/audit chain and
+  recording duration; pruning never removes the last verified backup;
+  unverified backups are refused for drills; write freeze returns 503 +
+  Retry-After for mutating requests while reads, /healthz and auth stay up;
+  activation/deactivation audited + founder-notified once per transition;
+  everything CLI-driven and testable in-sandbox with bundled pg tooling.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `app/modules/ops/backup.py` (create/verify/drill/prune),
+  `app/modules/ops/maintenance.py` (set/is/ TTL read + middleware),
+  maintenance middleware in `app/main.py`, CLI `backup
+  create|verify|drill|prune` + `maintenance on|off|status`, new settings
+  (ops_recovery tab), 5 notification templates, `tests/test_backup_recovery.py`
+  (7), docs/22 restore sequence
+- verification_evidence: 160 tests passing, ruff clean; live CLI smoke on a
+  real cluster: create (72ms, 88 rows/58 tables) -> verify OK (freshness
+  0.0h) -> drill PASSED (counts/schema/audit_chain ok, scratch DB dropped)
+  -> tampered artifact -> verify FAIL + drill refuses + prune refuses
+  ("no verified backup would remain") -> maintenance on/status/off cycle
+- failure_reason: —
+
 ## Open items (next rounds)
 
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

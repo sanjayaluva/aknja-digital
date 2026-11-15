@@ -561,6 +561,172 @@ def cmd_run_llm_benchmark(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_backup_create(args: argparse.Namespace) -> int:
+    """pg_dump the primary database + manifest + BackupRecord (v5.3.2 §5A)."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.backup import create_backup
+
+        result = create_backup(db, backup_dir=args.dir)
+        print(f"backup created: {result.record.storage_key}")
+        print(f"  artifact : {result.artifact}")
+        print(f"  sha256   : {result.sha256}")
+        print(f"  size     : {result.size_bytes / 1_048_576:.2f} MB")
+        print(f"  rows     : {sum(result.table_counts.values())} across "
+              f"{len(result.table_counts)} tables")
+        print(f"  duration : {result.duration_ms} ms")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_backup_verify(args: argparse.Namespace) -> int:
+    """Checksum-verify the newest (or named) backup; optional freshness SLO."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.backup import _latest_records, verify_backup
+
+        storage_key = args.backup
+        if storage_key is None:
+            latest = _latest_records(db, 1)
+            if not latest:
+                print("no backups recorded — run 'aknja backup create' first")
+                return 1
+            storage_key = latest[0].storage_key
+        result = verify_backup(args.dir, storage_key, max_age_hours=args.max_age_hours)
+        status = "OK" if result.ok else "FAIL"
+        age = f" age={result.age_hours:.1f}h" if result.age_hours is not None else ""
+        print(f"backup verify [{status}] {storage_key}: {result.reason}{age}")
+        return 0 if result.ok else 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_backup_drill(args: argparse.Namespace) -> int:
+    """Restore a backup into an isolated scratch DB and verify it (docs/22)."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.backup import run_restore_drill
+
+        result = run_restore_drill(db, storage_key=args.backup, backup_dir=args.dir,
+                                   drop_target=not args.keep_target)
+        status = "PASSED" if result.ok else "FAILED"
+        checks = (f"counts={'ok' if result.counts_match else 'MISMATCH'} "
+                  f"schema={'ok' if result.alembic_match else 'MISMATCH'} "
+                  f"audit_chain={'ok' if result.chain_valid else 'BROKEN'}")
+        print(f"restore drill [{status}] {result.storage_key} "
+              f"({result.duration_ms} ms, target {result.target_db})")
+        print(f"  {checks}")
+        if result.reason:
+            print(f"  reason: {result.reason}")
+        return 0 if result.ok else 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_backup_prune(args: argparse.Namespace) -> int:
+    """Delete old artifacts, never the last known-good backup (docs/22)."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.backup import prune_backups
+
+        result = prune_backups(db, keep_last=args.keep, backup_dir=args.dir)
+        if result.refused_reason:
+            print(f"prune refused: {result.refused_reason}")
+            return 1
+        print(f"pruned {len(result.removed)} backup(s); kept: {', '.join(result.kept) or 'none'}")
+        for key in result.removed:
+            print(f"  removed: {key}")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_maintenance_on(args: argparse.Namespace) -> int:
+    """Enable the write freeze (v5.3.2 §5A controlled promotion / v5.3.1 L141)."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.maintenance import set_maintenance_mode
+
+        changed, previous = set_maintenance_mode(
+            db, enabled=True, reason=args.reason, actor="CLI:founder"
+        )
+        if not changed:
+            print("maintenance mode already ON — no change")
+        else:
+            print(f"maintenance mode ON (was {'ON' if previous else 'OFF'})"
+                  + (f" — {args.reason}" if args.reason else ""))
+            print("mutating requests now get 503 + Retry-After; reads and /healthz stay up")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_maintenance_off(_args: argparse.Namespace) -> int:
+    """Disable the write freeze."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.maintenance import set_maintenance_mode
+
+        changed, previous = set_maintenance_mode(db, enabled=False, actor="CLI:founder")
+        if not changed:
+            print("maintenance mode already OFF — no change")
+        else:
+            print(f"maintenance mode OFF (was {'ON' if previous else 'OFF'}); writes re-enabled")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_maintenance_status(_args: argparse.Namespace) -> int:
+    """Show the write-freeze state and the newest backup freshness (H5/H6)."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.backup import latest_backup_status
+        from app.modules.ops.maintenance import is_maintenance_enabled, maintenance_reason
+
+        state = "ON" if is_maintenance_enabled() else "OFF"
+        reason = maintenance_reason()
+        print(f"maintenance mode: {state}" + (f" — {reason}" if reason else ""))
+        backup = latest_backup_status(db)
+        if backup is None:
+            print("backups: none recorded — run 'aknja backup create'")
+        else:
+            print(f"latest backup  : {backup.storage_key} — "
+                  f"{'OK' if backup.ok else 'PROBLEM: ' + backup.reason}")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aknja", description="Aknja Digital management CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -596,6 +762,32 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.add_argument("--evidence", default="", help="what was checked, by whom")
     p_verify.add_argument("--enable", action="store_true", help="also enable the account for admission")
     p_verify.add_argument("--commercial-use-ok", action="store_true", dest="commercial_use_ok")
+    # --- backup & maintenance (v5.3.2 §5A, docs/22) — nested subcommands ---
+    p_backup = sub.add_parser("backup", help="backup/verify/drill/prune (v5.3.2 §5A, docs/22)")
+    backup_sub = p_backup.add_subparsers(dest="subcommand", required=True)
+    p_bk_dir = argparse.ArgumentParser(add_help=False)
+    p_bk_dir.add_argument("--dir", default=None, help="backup directory (default: settings.backup_dir)")
+    backup_sub.add_parser("create", parents=[p_bk_dir],
+                           help="pg_dump the primary DB + manifest + record")
+    p_bv = backup_sub.add_parser("verify", parents=[p_bk_dir],
+                                 help="checksum-verify the newest (or named) backup")
+    p_bv.add_argument("backup", nargs="?", default=None, help="storage key (default: newest)")
+    p_bv.add_argument("--max-age-hours", type=float, default=None, dest="max_age_hours")
+    p_bd = backup_sub.add_parser("drill", parents=[p_bk_dir],
+                                 help="restore into an isolated scratch DB and verify (docs/22)")
+    p_bd.add_argument("backup", nargs="?", default=None, help="storage key (default: newest)")
+    p_bd.add_argument("--keep-target", action="store_true", dest="keep_target",
+                      help="keep the scratch database after the drill")
+    p_bp = backup_sub.add_parser("prune", parents=[p_bk_dir],
+                                 help="delete old artifacts, never the last known-good backup")
+    p_bp.add_argument("--keep", type=int, default=5, help="verified backups to retain (default 5)")
+
+    p_maint = sub.add_parser("maintenance", help="controlled write freeze (v5.3.2 §5A)")
+    maint_sub = p_maint.add_subparsers(dest="subcommand", required=True)
+    p_maint_on = maint_sub.add_parser("on", help="enable write freeze: 503 on writes, reads stay up")
+    p_maint_on.add_argument("--reason", default="", help="why (promotion, quota exhaustion, ...)")
+    maint_sub.add_parser("off", help="disable write freeze")
+    maint_sub.add_parser("status", help="show freeze state + newest backup freshness")
     sub.add_parser(
         "process-notifications",
         help="drain the due Telegram notification outbox (send/retry per docs/39)",
@@ -629,7 +821,16 @@ def main(argv: list[str] | None = None) -> int:
         "process-notifications": cmd_process_notifications,
         "send-test-notification": cmd_send_test_notification,
         "run-llm-benchmark": cmd_run_llm_benchmark,
+        "backup create": cmd_backup_create,
+        "backup verify": cmd_backup_verify,
+        "backup drill": cmd_backup_drill,
+        "backup prune": cmd_backup_prune,
+        "maintenance on": cmd_maintenance_on,
+        "maintenance off": cmd_maintenance_off,
+        "maintenance status": cmd_maintenance_status,
     }
+    if args.command in ("backup", "maintenance"):
+        return handlers[f"{args.command} {args.subcommand}"](args)
     return handlers[args.command](args)
 
 

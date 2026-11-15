@@ -87,6 +87,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     install_error_handlers(app)
+    # RequestContextMiddleware added LAST => OUTERMOST (request id, access
+    # log, security headers wrap everything, including 503 freeze responses);
+    # the maintenance write-freeze check runs inside it.
+    from app.modules.ops.maintenance import MaintenanceModeMiddleware
+
+    app.add_middleware(MaintenanceModeMiddleware)
     app.add_middleware(RequestContextMiddleware)
 
     # --- Health endpoints (docs/11 contract) ---

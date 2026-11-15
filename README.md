@@ -41,10 +41,19 @@ alembic upgrade head
 python -m app.cli create-super-admin --email founder@aknja.pp.ua
 python -m app.cli seed && python -m app.cli import-taxonomy && python -m app.cli verify-install
 uvicorn app.main:app --reload  # /admin · /portal · /api/docs · /health/ready
-pytest -q                      # 153 tests against real PostgreSQL
+pytest -q                      # 160 tests against real PostgreSQL
                                # (incl. Playwright E2E + visual baselines;
                                #  AKNJA_E2E=skip disables the browser layer,
                                #  AKNJA_E2E_UPDATE_BASELINES=1 regenerates them)
+
+Backup & maintenance (v5.3.2 §5A, docs/22):
+
+    python -m app.cli backup create             # pg_dump + manifest + record + audit + notify
+    python -m app.cli backup verify --max-age-hours 26
+    python -m app.cli backup drill              # restore into isolated scratch DB, verify, record
+    python -m app.cli backup prune --keep 5     # never removes the last verified backup
+    python -m app.cli maintenance on --reason "controlled promotion"
+    python -m app.cli maintenance status        # freeze state + newest backup freshness
 ```
 
 ## Important status statement

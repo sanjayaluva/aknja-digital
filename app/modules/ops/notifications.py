@@ -68,6 +68,26 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "ml": "ടെസ്റ്റ് സന്ദേശം — ടെലിഗ്രാം ചാനൽ സജ്ജമാണ്.",
         "en": "Test message — the Telegram channel is configured and working.",
     },
+    "backup.completed": {
+        "ml": "ബാക്കപ്പ് പൂർത്തിയായി: {storage_key} ({size_mb:.1f} MB)",
+        "en": "Backup completed: {storage_key} ({size_mb:.1f} MB)",
+    },
+    "backup.drill_completed": {
+        "ml": "റിസ്റ്റോർ ഡ്രിൽ വിജയിച്ചു: {storage_key} — {duration_s:.1f} സെക്കൻഡ്",
+        "en": "Restore drill PASSED: {storage_key} — {duration_s:.1f}s",
+    },
+    "backup.drill_failed": {
+        "ml": "റിസ്റ്റോർ ഡ്രിൽ പരാജയപ്പെട്ടു: {storage_key} — {reason}",
+        "en": "Restore drill FAILED: {storage_key} — {reason}",
+    },
+    "maintenance.activated": {
+        "ml": "മെയിന്റനൻസ് മോഡ് ഓണാക്കി (റൈറ്റ് ഫ്രീസ്): {reason}",
+        "en": "Maintenance mode ON (write freeze): {reason}",
+    },
+    "maintenance.deactivated": {
+        "ml": "മെയിന്റനൻസ് മോഡ് ഓഫാക്കി: {reason}",
+        "en": "Maintenance mode OFF: {reason}",
+    },
 }
 
 
