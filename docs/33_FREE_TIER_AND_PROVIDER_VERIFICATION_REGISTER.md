@@ -27,11 +27,11 @@ No external provider should be enabled until evidence is recorded. A provider ca
   retired the un-namespaced llama defaults (`llama-3.3-70b-versatile` AND
   `llama-3.1-8b-instant` → 404 model_not_found); live PONG with
   `openai/gpt-oss-20b` (370 ms) — new adapter default.
-- gemini: DISABLED (audited). generateContent is region-blocked for this
-  account from BOTH the dev sandbox ("User location is not supported",
-  400 FAILED_PRECONDITION) and the OCI egress (silent drop → read timeout);
-  the models metadata endpoint works, keys are valid. Re-verify from an
-  allowed region before enabling; keys stay in settings.
+- gemini: FREE_VERIFIED + ENABLED (re-audited T-024f; allowance 200/day
+  conservative). The earlier "region block" note was a MISDIAGNOSIS: the
+  dev sandbox egresses from Hong Kong (blocked for every authenticated
+  call, clean 400) while the OCI egress is Mumbai, where the key works.
+  See the T-024f section below for the capacity/quality detail.
 - indictrans2 (self-hosted, MIT): FREE_VERIFIED, allowance 5000/day
   (self-imposed rate protection) — worker on instance-2, reached via
   reverse SSH tunnel. Live ping 3838 ms; PROD translation benchmark
@@ -54,3 +54,37 @@ No external provider should be enabled until evidence is recorded. A provider ca
 - uptime: founder signed up UptimeRobot (probing ~5 min, multi-IP);
   our GET-only /healthz answered 405 to their HEAD probes (read as
   DOWN) — fixed with an explicit HEAD route (57281f6), monitor now green.
+
+## Gemini re-diagnosis + provider re-enable — 2026-11-15 (T-024f)
+
+Trigger: the founder ran the home-network curl test. Command 1 (correct
+`x-goog-api-key` header) returned NOTHING in 15s; command 2 used a typo'd
+header (`x-google-api-key`), so the fast 403 was only the no-key response,
+not a verdict on the key. Five-probe matrix from OCI Mumbai decoded it:
+
+| probe | result |
+|---|---|
+| models list, key | 200 — key VALID, India NOT blocked |
+| generateContent gemini-3.8-flash / 3.6 / v1 path / http1.1 | black-hole, >120s no response |
+| streamGenerateContent same model | fast honest 503 "high demand" |
+| gemma-4-31b-it generateContent | 200, but 15s for a PONG (thinking preamble; thinkingBudget=0 rejected 400) |
+| gemma-4-26b-a4b-it generateContent | 200, 2s PONG — the working default |
+
+Verdict: the free-tier gemini-3.x-flash line is capacity-starved; the
+non-streaming endpoint black-holes instead of erroring (Google-side
+degradation). The sandbox egress (HK) is separately region-blocked with a
+clean 400 — the source of the original misdiagnosis.
+
+Fixes shipped: gemini adapter now skips gemma-4 "thought" parts (a live
+translation run scored 12% purely from parsing the thinking preamble;
++test), default model -> gemma-4-26b-a4b-it. Provider re-enabled with
+audited evidence; llm-ping OK 2683 ms.
+
+Benchmarks (records 730c4974 translation-only, c7d5113e full):
+- translation 0/8 vs indictrans2 8/8 — IndicTrans2 DECISIVELY wins the
+  deferred comparison; gemini stays gated for translation.
+- requirements 75% PASS and code_review 75% PASS -> UNGATED: the pool now
+  has a third live lane (groq all tasks, openrouter partial, gemini
+  requirements+code_review).
+- classification 62%, summarization 0%, proposal_draft 25%, qa_review 50%
+  -> gated until a passing re-run (flash capacity may change this).

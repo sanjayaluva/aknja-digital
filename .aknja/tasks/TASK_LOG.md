@@ -607,14 +607,30 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
 - status: COMPLETED — translation live (indictrans2 8/8), monitors
   green, bucket consolidated, chain healthy, allowances evidence-based.
 
+## T-024f — Gemini re-diagnosis: misdiagnosis corrected, provider re-enabled (this round)
+
+- founder's home curl test decoded: the 403 was a typo'd header (no-key
+  response); the hang on the correct call matched OCI. Five-probe matrix
+  from Mumbai: key VALID, India NOT blocked, gemini-3.x-flash free-tier
+  capacity-starved (non-streaming black-hole vs honest streaming 503);
+  sandbox HK egress is the actually-blocked network (source of the
+  T-023g misdiagnosis).
+- two real app bugs fixed: gemini adapter parsed gemma-4 thought parts
+  as the answer (12% translation score was pure parsing); default model
+  gemma-4-31b-it too slow (15s PONG) -> gemma-4-26b-a4b-it (2s PONG).
+- provider re-enabled with audited evidence; ping OK 2683 ms.
+- deferred comparison CLOSED: translation 0/8 vs indictrans2 8/8 —
+  IndicTrans2 wins decisively. Full benchmark: requirements + code_review
+  75% PASS each -> gemini UNGATED for those two tasks (third live pool
+  lane); other tasks gated pending flash capacity.
+- status: COMPLETED — gemini is a live, honestly-gated pool member.
+
 ## Open items (next rounds)
 
-- Gemini resolution (founder): test the API key from a home/allowed
-  network (curl one-liner in docs/33); if it works there, decide — a
-  Google account whose home country is supported, or drop gemini
-  (translation is fully served by indictrans2; gemma-4 :free probes
-  can substitute for Google-quality comparisons once the daily budget
-  resets)
+- DONE T-024f: gemini re-enabled (gemma-4-26b-a4b-it default) and
+  ungated for requirements + code_review; flash-line capacity retest
+  whenever ping goes slow again (streamGenerateContent surfaces the
+  honest 503)
 - openrouter re-benchmark after a :free model change (currently gated
   for translation/code_review/proposal_draft by honest evidence); groq
   full benchmark (unbenmarked = eligible for all tasks today)
