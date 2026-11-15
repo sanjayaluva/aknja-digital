@@ -243,6 +243,13 @@ def server_url():
             time.sleep(0.2)
     else:
         pytest.fail("E2E server did not become healthy")
+    # Warm the cold paths (template compilation, engine pool, settings) so the
+    # first login on a slow 2-core CI runner is not a 10s+ outlier.
+    for path in ("/login", "/healthz/ready"):
+        try:
+            httpx.get(f"{base}{path}", timeout=15)
+        except httpx.HTTPError:
+            pass
     yield base
     uvi.should_exit = True
     thread.join(timeout=10)
@@ -307,4 +314,6 @@ def login(page, base_url: str, email: str, password: str) -> None:
     page.fill('input[name="email"]', email)
     page.fill('input[name="password"]', password)
     page.click('button[type="submit"]')
-    page.wait_for_url(lambda url: "/admin" in url or "/portal" in url, timeout=10_000)
+    # 30s: the first login on a cold CI runner (argon2 + session + audit
+    # writes + template compile) can exceed a tight 10s budget.
+    page.wait_for_url(lambda url: "/admin" in url or "/portal" in url, timeout=30_000)

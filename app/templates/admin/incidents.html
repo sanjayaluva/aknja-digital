@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Incidents — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Incidents</h1>
+      <p class="muted">Monitor-managed lifecycle (docs/20): detect → notify → mitigate → verify → close.
+      Safe recovery is allow-listed; the founder is notified on open and resolve.</p></div>
+    {% if active %}<div class="alert alert-danger">{{ active }} active incident(s)</div>{% endif %}
+  </header>
+
+  <section class="card">
+    <h2>All incidents</h2>
+    <nav class="filter-row">
+      <a href="/admin/incidents" class="tag {{ 'tag-ok' if not status else '' }}">all</a>
+      {% for s in ("OPEN", "INVESTIGATING", "MITIGATED", "RESOLVED", "CLOSED") %}
+      <a href="/admin/incidents?status={{ s }}" class="tag {{ 'tag-ok' if status == s else '' }}">{{ s }}</a>
+      {% endfor %}
+    </nav>
+    {% if incidents %}
+    <table class="table">
+      <thead><tr><th>Detected</th><th>Title</th><th>Severity</th><th>Status</th><th>Timeline</th></tr></thead>
+      <tbody>
+      {% for i in incidents %}
+      <tr>
+        <td>{{ i.detected_at.strftime('%d %b %H:%M') }}</td>
+        <td><a href="/admin/incidents/{{ i.id }}">{{ i.title }}</a></td>
+        <td><span class="tag {{ 'tag-danger' if i.severity in ('HIGH', 'CRITICAL') else 'tag-warn' }}">{{ i.severity }}</span></td>
+        <td><span class="tag {{ 'tag-ok' if i.status in ('RESOLVED', 'CLOSED') else 'tag-warn' }}">{{ i.status }}</span></td>
+        <td class="mono">{{ (i.timeline or [])|length }} events{% if i.recovery_actions %} · {{ i.recovery_actions|length }} recovery{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No incidents{{ ' with this filter' if status else '' }}. The monitor opens one automatically when a check fails.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

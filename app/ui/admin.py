@@ -798,3 +798,131 @@ def invoices_page(request: Request):
         )
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------- incidents
+
+
+_ACTIVE_STATES = ("OPEN", "INVESTIGATING", "MITIGATED")
+
+
+@router.get("/incidents", response_class=HTMLResponse)
+def incidents_page(request: Request, status: str = ""):
+    """Incident console (docs/20): monitor-managed lifecycle, operator close."""
+    principal, redirect = guard(request)
+    if redirect:
+        return redirect
+    db = db_session()
+    try:
+        from sqlalchemy import select
+
+        from app.modules.ops.models import Incident
+
+        query = select(Incident).where(Incident.tenant_id == principal.tenant_id)
+        if status in _ACTIVE_STATES + ("RESOLVED", "CLOSED"):
+            query = query.where(Incident.status == status)
+        incidents = db.scalars(
+            query.order_by(
+                # active first, newest detection first within each group
+                Incident.resolved_at.is_not(None), Incident.detected_at.desc()
+            ).limit(100)
+        ).all()
+        active = sum(1 for i in incidents if i.status in _ACTIVE_STATES)
+        return render(
+            request,
+            "admin/incidents.html",
+            {"incidents": incidents, "status": status, "active": active},
+        )
+    finally:
+        db.close()
+
+
+@router.get("/incidents/{incident_id}", response_class=HTMLResponse)
+def incident_detail_page(request: Request, incident_id: uuid.UUID):
+    principal, redirect = guard(request)
+    if redirect:
+        return redirect
+    db = db_session()
+    try:
+        from sqlalchemy import select
+
+        from app.modules.ops.models import Incident
+
+        incident = db.scalar(
+            select(Incident).where(
+                Incident.tenant_id == principal.tenant_id, Incident.id == incident_id
+            )
+        )
+        if incident is None:
+            return render(request, "error.html", {"code": 404, "message": "Incident not found"}, status_code=404)
+        timeline = list(incident.timeline or [])
+        timeline.reverse()  # newest first for the operator
+        return render(
+            request,
+            "admin/incident_detail.html",
+            {"incident": incident, "timeline": timeline},
+        )
+    finally:
+        db.close()
+
+
+@router.post("/incidents/{incident_id}/close", response_class=HTMLResponse)
+def incident_close(
+    request: Request,
+    incident_id: uuid.UUID,
+    note: str = Form(""),
+    csrf_token: str = Form(...),
+):
+    """Manual close: stops tracking; the monitor opens a NEW incident if the
+    check fails again (docs/20 dedupe only spans OPEN/INVESTIGATING/MITIGATED)."""
+    principal, redirect = guard(request, write=True)
+    if redirect:
+        return redirect
+    err = csrf_guard(request, principal, csrf_token)
+    if err:
+        return err
+    db = db_session()
+    try:
+        from datetime import UTC, datetime
+
+        from sqlalchemy import select
+
+        from app.modules.ops.models import Incident
+
+        incident = db.scalar(
+            select(Incident).where(
+                Incident.tenant_id == principal.tenant_id, Incident.id == incident_id
+            )
+        )
+        if incident is None:
+            return render(request, "error.html", {"code": 404, "message": "Incident not found"}, status_code=404)
+        if incident.status in ("RESOLVED", "CLOSED"):
+            return RedirectResponse(f"/admin/incidents/{incident.id}", status_code=303)
+        incident.status = "CLOSED"
+        incident.resolved_at = datetime.now(UTC)
+        incident.timeline = [
+            *(incident.timeline or []),
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "event": "CLOSED_BY_OPERATOR",
+                "actor": principal.email,
+                "note": note or "",
+            },
+        ]
+        governance.record_audit(
+            db,
+            tenant_id=principal.tenant_id,
+            actor_type="user",
+            actor_id=str(principal.user_id),
+            action="incident.closed",
+            resource_type="incident",
+            resource_id=str(incident.id),
+            payload={"note": note or ""},
+        )
+        db.commit()
+        return RedirectResponse("/admin/incidents", status_code=303)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()

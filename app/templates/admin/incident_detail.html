@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Incident — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>{{ incident.title }}</h1>
+      <p class="muted mono">[{{ incident.id }}]</p></div>
+    <div>
+      <span class="tag {{ 'tag-danger' if incident.severity in ('HIGH', 'CRITICAL') else 'tag-warn' }}">{{ incident.severity }}</span>
+      <span class="tag {{ 'tag-ok' if incident.status in ('RESOLVED', 'CLOSED') else 'tag-warn' }}">{{ incident.status }}</span>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>Description</h2>
+    <p>{{ incident.description }}</p>
+    <p class="muted">Detected {{ incident.detected_at.strftime('%d %b %Y %H:%M') }} UTC
+      {% if incident.resolved_at %} · resolved {{ incident.resolved_at.strftime('%d %b %Y %H:%M') }} UTC{% endif %}</p>
+    {% if incident.status not in ('RESOLVED', 'CLOSED') %}
+    <form method="post" action="/admin/incidents/{{ incident.id }}/close" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <input type="text" name="note" placeholder="closure note (optional)" class="input">
+      <button class="btn btn-sm btn-danger" type="submit">Close incident</button>
+    </form>
+    <p class="muted">Closing stops tracking: if the check fails again, the monitor opens a new incident.</p>
+    {% endif %}
+  </section>
+
+  {% if incident.recovery_actions %}
+  <section class="card">
+    <h2>Recovery actions (allow-listed)</h2>
+    <table class="table">
+      <thead><tr><th>Action</th><th>Items</th><th>When</th></tr></thead>
+      <tbody>
+      {% for r in incident.recovery_actions %}
+      <tr>
+        <td class="mono">{{ r.action }}</td>
+        <td>{{ r.count }}</td>
+        <td>{{ r.ts[:16].replace('T', ' ') }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>Timeline (newest first)</h2>
+    {% if timeline %}
+    <table class="table">
+      <thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>
+      <tbody>
+      {% for e in timeline %}
+      <tr>
+        <td class="mono">{{ e.ts[:19].replace('T', ' ') }}</td>
+        <td><span class="tag">{{ e.event }}</span></td>
+        <td>
+          {% if e.event == 'AI_DIAGNOSIS' and e.summary %}<pre class="mono pre-wrap">{{ e.summary }}</pre>
+          {% elif e.detail %}{{ e.detail }}
+          {% elif e.reason %}{{ e.reason }}
+          {% elif e.note %}{{ e.note }}{% if e.actor %} — {{ e.actor }}{% endif %}
+          {% elif e.action %}{{ e.action }}{% if e.count is defined %} ({{ e.count }} item(s)){% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No timeline entries.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

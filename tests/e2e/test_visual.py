@@ -40,6 +40,7 @@ DESKTOP_SCREENS = [
     "admin-catalog",
     "admin-providers",
     "admin-reports",
+    "admin-incidents",
     "portal-project",
 ]
 

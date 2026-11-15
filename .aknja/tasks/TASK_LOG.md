@@ -293,6 +293,35 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   order fixed (credentialed URLs before bare emails)
 - failure_reason: —
 
+## T-014 — Admin incidents console + CI stabilization (this round)
+
+- goal: operator surface for the T-013 incident automation (list/detail/timeline/
+  recovery display + manual close), and a fully green CI pipeline (test+e2e+
+  security) — the first all-green CI run in repo history.
+- inputs: docs/20, docs/12 (admin UI conventions), T-013 monitor, CI run
+  43692491856/43692798617 logs
+- acceptance_criteria: /admin/incidents lists monitor-managed incidents with
+  status filter and severity/status tags; detail shows timeline (newest first),
+  recovery actions and AI diagnosis entries; manual close is CSRF-protected,
+  audited, timeline-recorded, and stops tracking (monitor opens a new incident
+  on the next failure); cross-tenant requests 404; visual baseline added.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `app/ui/admin.py` (GET /admin/incidents[/{id}], POST .../close),
+  `app/templates/admin/incidents.html` + `incident_detail.html`, nav entry,
+  `tests/test_incidents_ui.py` (7), admin-incidents visual baseline (+8
+  re-synced baselines, byte-stable rendering), e2e server warm-up + 30s login
+  timeout (CI cold-start fix), CI fixes from run-logs: real gitleaks v2 SHA
+  (security job had never run — unresolvable pin since T-003) and psycopg
+  scheme conversion in the e2e scratch-db step
+- verification_evidence: local 179/179 (ruff clean; e2e layer 20/20);
+  CI run bd723b9: test SUCCESS + security SUCCESS (first time), e2e
+  10/11 with the sole failure the first-login cold start on the 2-core
+  runner (TimeoutError >10s) — fixed by warm-up + 30s; run 9a82b3a: test
+  SUCCESS (clean-runner manifest fix proven), security/e2e failures
+  root-caused from logs and fixed in bd723b9
+- failure_reason: —
+
 ## Open items (next rounds)
 
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)
