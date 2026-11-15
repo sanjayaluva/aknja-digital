@@ -1,0 +1,17 @@
+# gitleaks configuration — extends the default rule set.
+#
+# The only exemption is test fixtures: the suite constructs Settings with
+# obviously-fake credentials ("mistral-key-1", "or-key-1", "gemini-key-1",
+# "cf-key-1", ...). The generic-api-key rule fires on the *_api_key FIELD
+# NAME alone, so fixtures can never pass without this path exemption.
+# Real secrets must never appear anywhere in this repository — including
+# tests/ — and every other path stays fully scanned.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures with obviously-fake provider keys"
+paths = [
+    '''tests/.*\.py''',
+]
