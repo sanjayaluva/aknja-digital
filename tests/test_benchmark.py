@@ -393,6 +393,43 @@ def test_benchmark_reattempts_gated_provider(db, seed) -> None:
     assert unblocked.status == "SUCCEEDED"
 
 
+def test_throttled_run_is_inconclusive_and_does_not_poison_the_gate(db, seed) -> None:
+    """A run answered mostly by provider 429s measures availability, not quality.
+
+    Live case (2026-11-15): an openrouter re-run inside an upstream :free
+    throttle window recorded 0% — all provider errors — and gated tasks the
+    same provider had honestly passed hours earlier. Inconclusive rows must
+    not overwrite the last conclusive verdict.
+    """
+    _setup_provider(db, seed)
+
+    def _throttled(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    throttled = httpx.Client(transport=httpx.MockTransport(_throttled), timeout=5)
+
+    card = run_benchmark(
+        db, tenant_id=seed.tenant.id, provider=PROVIDER,
+        http_client=throttled, settings=_settings(ai_provider_enabled=True),
+    )
+    db.commit()
+    assert card["passed"] is False
+    assert card["inconclusive"] is True
+    assert card["provider_errors"] == card["scenarios"]
+    row = db.get(ProviderQualityBenchmark, card["record_id"])
+    assert row.score_json["inconclusive"] is True
+
+    # the gate ignores the inconclusive row: no benchmark row ever PASSED,
+    # so nothing gates — but crucially nothing FAILS on phantom 0% evidence
+    # either; with a healthy provider the traffic flows normally
+    ok = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(ai_provider_enabled=True), http_client=_good_client(),
+    )
+    assert ok.status == "SUCCEEDED"
+    assert "quality floor" not in str(ok.attempts)
+
+
 # --- §6 inference gate -----------------------------------------------------------
 
 

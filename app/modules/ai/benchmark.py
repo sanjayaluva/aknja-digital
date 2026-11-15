@@ -529,6 +529,17 @@ def run_benchmark(
     passed = bool(per_task) and all(t["passed"] for t in per_task.values())
     latencies = [r["latency_ms"] for r in results if r["latency_ms"]]
 
+    # Availability vs quality (live 2026-11-15): when most scenarios never
+    # got an answer (429/timeout provider errors — e.g. an upstream :free
+    # throttle window), the 0% measures AVAILABILITY, not model quality.
+    # Mark the row inconclusive: it stays as honest evidence but the gate
+    # skips it and keeps the last conclusive verdict.
+    provider_errors = sum(
+        1 for r in results
+        if r["failed_checks"] and str(r["failed_checks"][0]).startswith("provider error")
+    )
+    inconclusive = bool(results) and provider_errors / len(results) >= 0.5
+
     row = ProviderQualityBenchmark(
         provider_product_id=product.id,
         provider=account.provider,
@@ -538,6 +549,8 @@ def run_benchmark(
         score_json={
             "per_task": per_task, "per_language": per_language,
             "overall_score": overall, "scenario_results": results,
+            "inconclusive": inconclusive,
+            "provider_errors": provider_errors,
             "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
         },
         passed=passed,
@@ -572,6 +585,8 @@ def run_benchmark(
         "overall_score": overall,
         "per_task": per_task,
         "per_language": per_language,
+        "inconclusive": inconclusive,
+        "provider_errors": provider_errors,
     }
 
 
@@ -581,15 +596,21 @@ def benchmark_gate(db: Session, product_id: uuid.UUID, task: str) -> str | None:
     None means eligible: no benchmark row, a passed benchmark, a benchmark
     that did not cover this task, or one older than BENCHMARK_FRESH_DAYS
     (stale evidence must not gate forever — re-run the benchmark instead).
+
+    INCONCLUSIVE rows (a run whose scenarios were mostly provider errors —
+    e.g. an upstream :free throttle window, live 2026-11-15) are skipped:
+    they measure availability, not quality, and must not overwrite the last
+    honest verdict with a self-referential 0%.
     """
     from datetime import timedelta
 
-    row = db.scalar(
+    rows = db.scalars(
         select(ProviderQualityBenchmark)
         .where(ProviderQualityBenchmark.provider_product_id == product_id)
         .order_by(ProviderQualityBenchmark.evaluated_at.desc())
-        .limit(1)
-    )
+        .limit(5)
+    ).all()
+    row = next((r for r in rows if not (r.score_json or {}).get("inconclusive")), None)
     if row is None or row.passed:
         return None
     if row.evaluated_at < utcnow() - timedelta(days=BENCHMARK_FRESH_DAYS):

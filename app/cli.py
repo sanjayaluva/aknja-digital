@@ -546,7 +546,11 @@ def cmd_run_llm_benchmark(args: argparse.Namespace) -> int:
         print(f"overall: {card['overall_score']:.0%} — "
               f"{'PASSED' if card['passed'] else 'FAILED'} "
               f"(record {card['record_id']})")
-        if not card["passed"]:
+        if card.get("inconclusive"):
+            print(f"NOTE: run recorded as INCONCLUSIVE ({card.get('provider_errors', 0)}/"
+                  f"{card['scenarios']} scenarios were provider errors — availability, "
+                  "not quality). The quality gate keeps the previous conclusive verdict.")
+        elif not card["passed"]:
             print("the inference layer now skips this provider for the failed tasks "
                   "until a passing re-run (v5.3.2 §6)")
         return 0 if card["passed"] else 1
