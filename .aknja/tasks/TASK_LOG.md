@@ -531,17 +531,60 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   provisioning steps after migrations.
 - status: COMPLETED.
 
+## T-023 — Translation ungated: IndicTrans2 worker + task-scoped routing + instance-2 + CI/CD (this round)
+
+- founder decisions honored: aknja.pp.ua is the FINAL domain for now
+  (aknja.in cutover deferred until stable — recorded in docs/19); complete
+  the requirement-doc open items.
+- app: `admit_usage(task=...)` implements the docs/13 classify step —
+  products with `capability_contract["tasks"]` serve ONLY those tasks and
+  never generic traffic; indictrans2 adapter (OpenAI-compatible worker
+  shim) + candidate entry; groq default model fixed to `openai/gpt-oss-20b`
+  (llama defaults retired, live 404); tests +6, suite 175 green; ruff
+  import-order fix (CI caught what the recycled sandbox missed — ruff is
+  now part of the local pre-commit habit).
+- worker (infra/oci/worker/): IndicTrans2-dist-200M en<->{ml,hi,ta};
+  Devanagari script-unification conversion (indicnlp), brand preservation
+  via startup-calibrated stems + glossary; transformers pinned 4.38.2
+  (5.x broke the custom code: transformers.onnx removed; beam-search cache
+  shape); validated 8/8 over HTTP locally BEFORE deployment.
+- instance-2: staging (PG+app, tunnel-only access) + worker + reverse SSH
+  tunnel to inst1 (restricted key, no security-list change).
+- prod: candidates registered; openrouter/groq/indictrans2 FREE_VERIFIED
+  (allowances 50/1000/5000 per day, conservative/self-imposed); gemini
+  DISABLED with audit — generateContent region-blocked from sandbox (400)
+  and OCI (silent drop); live pings: openrouter PONG 2594 ms, groq PONG
+  370 ms, indictrans2 3838 ms (full Malayalam translation).
+- benchmarks (prod, honest): openrouter FULL 36 scenarios — 68% overall,
+  PASS classification/summarization/requirements/qa_review, FAIL
+  translation 50% / code_review 50% / proposal_draft 25% → gate active
+  for those (record 0979448a). indictrans2 translation 100% PASS 8/8
+  (record d665d003) → TRANSLATION UNGATED; non-targeted routing proof:
+  llm_complete(task=translation) auto-selects indictrans2 (4.5 s, brands
+  preserved).
+- CI/CD: deploy.yml (workflow_dispatch) + restricted ed25519 deploy key
+  (command= wrapper, sha-only) + GitHub secret OCI_DEPLOY_KEY (libsodium-
+  sealed); full-path deploy run: success (1b6c8b8); wrapper healthz retry
+  fixed (curl race at 3 s).
+- DR: prod offsite restore drill PASSED (isolated scratch DB; aknja role
+  granted CREATEDB); instance-2 cross-host R2 pull + sha256 match.
+- incident notes: llm-ping prompt must be target-language shaped (worker
+  contract); deploy wrapper healthz race (fixed); sandbox `source .env`
+  broke on unquoted spaces → false "invalid key" during gemini debugging.
+- status: COMPLETED — translation live via self-hosted free path.
+
 ## Open items (next rounds)
 
-- Founder console confirmations: gemini/groq current free-tier numbers
-  (allowances recorded conservatively) — [mistral item CLOSED 2026-11-15:
-  provider retired the free tier]
-- Instance-2 bootstrap (staging + restore-drill target + IndicTrans2
-  translation worker) — production (inst-1) is LIVE per T-021/docs/43
-- GitHub-Actions-over-SSH deploy workflow for inst-1 (this deploy ran via
-  the persisted phased script; promote it to workflow_dispatch next)
+- Founder console confirmations: groq current free-tier numbers
+  (allowance recorded conservatively at 1000/day); gemini re-verification
+  from an allowed region (generateContent region-blocked from sandbox+OCI,
+  product disabled with audit — T-023g) or drop gemini from the pool
+- openrouter re-benchmark after a :free model change (currently gated
+  for translation/code_review/proposal_draft by honest evidence); groq
+  full benchmark (unbenmarked = eligible for all tasks today)
 - external uptime monitor on https://aknja.pp.ua/healthz (UptimeRobot
   candidate, docs/34) — needs founder account signup
-- openrouter translation re-run with the chosen free path: self-hosted
-  IndicTrans2-dist-200M benchmark on the ml floor, Gemini-free comparison,
-  then ungate translation — currently gated for translation
+- optional: create the `agency-artifacts` R2 bucket (admin rights
+  confirmed T-021; app stays on aknja-digital-artifacts by default)
+- client-facing translation feature (service catalog item) built on the
+  now-proven task=translation path (indictrans2 + fallback pool)

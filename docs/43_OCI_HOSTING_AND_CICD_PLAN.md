@@ -118,3 +118,29 @@ Instance 2 remains clean — reserved for staging + restore-drill target +
 IndicTrans2 translation worker (docs/34 §3). The GitHub-Actions-over-SSH
 deploy workflow (this deploy ran via the persisted script) is the next
 increment; `infra/oci/` + the phased script are the reproducible base.
+
+## Instance-2 + translation worker record — 2026-11-15 (T-023)
+
+- staging app: PostgreSQL (aknja_staging), uv CPython 3.12.16 aarch64,
+  `uv sync --frozen --no-dev`, alembic x5, super-admin + seed (49/10/5) +
+  taxonomy (224 services); uvicorn 127.0.0.1:8000 (aknja.service), SSH
+  tunnel access only (`ssh -L 8080:localhost:8000 ubuntu@80.225.208.59`).
+- translation worker: IndicTrans2-dist-200M both directions (MIT, HF
+  gated:auto — access granted to the founder account), OpenAI-compatible
+  shim at 127.0.0.1:8001 (infra/oci/worker/). Strategy validated 8/8
+  against the app's benchmark evaluator: Devanagari script unification
+  handled by post/pre conversion; brand terms preserved via startup-
+  calibrated stem restore (en→X) and glossary injection (X→en); 400 on
+  non-translation prompts. transformers PINNED to 4.38.2 (5.x removed
+  transformers.onnx which the custom code imports).
+- reverse SSH tunnel (inst2 → inst1:127.0.0.1:8001) — no OCI security-list
+  change needed; dedicated ed25519 key on inst2, restricted to
+  port-forwarding on inst1 (`restrict,port-forwarding`).
+- CI/CD LIVE: `.github/workflows/deploy.yml` (workflow_dispatch →
+  restricted deploy key → `aknja-deploy.sh` wrapper accepting ONLY a
+  40-char sha → uv sync + alembic + restart + healthz, then external
+  https://aknja.pp.ua/healthz smoke). Deployed 1b6c8b8 through the full
+  GitHub path (run: completed success). Wrapper source in infra/oci/.
+- DR evidence: prod offsite restore drill PASSED (counts/schema/
+  audit_chain, isolated scratch DB; `aknja` role granted CREATEDB for
+  drills) + instance-2 cross-host R2 pull with sha256 match.

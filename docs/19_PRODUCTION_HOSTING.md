@@ -21,3 +21,12 @@ Promote the exact staging-approved digest. Verify config/secrets, DNS, TLS, migr
 
 ## SLA
 Do not promise high availability from a single VM. Define availability, maintenance windows, response targets, backup retention, RPO/RTO, support hours, exclusions and client responsibilities in contract only after capacity and recovery drills validate them.
+
+## Domain decision — 2026-11-15 (founder)
+
+`aknja.pp.ua` is the ACTIVE and FINAL public domain for the current phase.
+The SRS's `aknja.in` production cutover (docs/01, switchable via
+`/admin/settings`) is DEFERRED until the system is stable and working as
+expected — no date set. The admin-settings switch capability stays as
+designed; only the cutover is postponed. TLS/Caddy already serve
+aknja.pp.ua (T-021).
