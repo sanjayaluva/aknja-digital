@@ -6,16 +6,17 @@ Create Date: 2026-11-15 01:40:00.000000
 """
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision: str = 'd8e3f6a7c2b4'
-down_revision: Union[str, None] = 'c7d2e8f4a9b1'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = 'c7d2e8f4a9b1'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

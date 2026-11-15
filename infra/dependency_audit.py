@@ -27,15 +27,14 @@ can confirm none of them is a paid-service SDK.
 
 from __future__ import annotations
 
-import importlib.util
 import argparse
 import ast
+import importlib.util
 import json
 import re
 import subprocess
 import sys
 import tomllib
-from collections import defaultdict
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
@@ -117,7 +116,7 @@ def installed_dists() -> dict[str, metadata.Distribution]:
 def module_to_dist_map() -> dict[str, list[str]]:
     try:
         return metadata.packages_distributions()
-    except Exception:  # pragma: no cover — older importlib metadata
+    except Exception:  # noqa: BLE001 — older importlib metadata raises several types
         return {}
 
 
@@ -140,9 +139,8 @@ def scan_imports(repo: Path) -> set[str]:
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         modules.add(alias.name.split(".")[0])
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module and node.level == 0:
-                        modules.add(node.module.split(".")[0])
+                elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                    modules.add(node.module.split(".")[0])
     return modules - _IMPORT_IGNORE
 
 
@@ -165,7 +163,7 @@ def run_pip_audit() -> tuple[list[dict], str]:
     else:
         return [], "skipped: pip-audit not installed (pip install pip-audit for CVE scan)"
     try:
-        proc = subprocess.run(  # noqa: S603 — fixed argv
+        proc = subprocess.run(
             cmd + ["--format", "json", "--skip-editable"],
             capture_output=True, text=True, timeout=600, check=False,
         )
@@ -295,8 +293,8 @@ def main() -> int:
         f"- generated: {report['generated_at']}",
         f"- repository: `{repo}`",
         f"- manifest: `{manifest_kind}` ({len(direct_names)} direct dependencies)",
-        f"- installed: {report['counts']['installed']} "
-        f"({report['counts']['direct']} direct, {report['counts']['transitive']} transitive)",
+        (f"- installed: {report['counts']['installed']}"
+         f" ({report['counts']['direct']} direct, {report['counts']['transitive']} transitive)"),
         "",
         "## Vulnerabilities (pip-audit)",
         "",

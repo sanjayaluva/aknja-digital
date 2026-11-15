@@ -327,6 +327,31 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   + security all success
 - failure_reason: —
 
+## T-015 — Sandbox-rollback recovery + whole-repo lint parity (this round)
+
+- goal: recover from a full sandbox rollback (the working clone, venv and
+  PAT file were wiped; everything of value was already on GitHub), then
+  clear the whole-repo lint debt CI was not covering.
+- inputs: scripts/restore_and_audit.sh (T-002 tooling), run logs of
+  `ruff check .` vs CI's `ruff check app tests`
+- acceptance_criteria: repo restored at a622704 and synced; venv rebuilt;
+  chromium reinstalled; 179/179 local suite green (visual baselines
+  byte-stable); authoritative audit clean; `ruff check .` fully clean;
+  CI lint scope tightened to the whole repo.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: 34 auto-fixed findings (I001 import order, UP007/UP035 typing
+  modernization, F401, RUF100) across alembic/env.py + 4 migration files
+  + infra/dependency_audit.py; 3 manual fixes (BLE001 noqa with reason,
+  SIM102 merged condition, ISC004 parenthesized concat); ci.yml lint step
+  `ruff check app tests` -> `ruff check .`
+- verification_evidence: restore_and_audit.sh replay (public mode,
+  EXPECT overrides) brought the clone back at a622704; full pytest 179/179
+  after migration-file lint edits (alembic upgrade head exercised by the
+  e2e fixture); infra audit tool still reports 81 installed / 0 CVE /
+  0 unused / 0 undeclared / 0 unresolved
+- failure_reason: —
+
 ## Open items (next rounds)
 
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

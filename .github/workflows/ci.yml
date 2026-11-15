@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies (locked)
         run: uv sync --frozen --all-extras
       - name: Lint (ruff)
-        run: uv run ruff check app tests
+        run: uv run ruff check .
       - name: Apply migrations
         run: uv run alembic upgrade head
       - name: Run tests (unit/integration)
