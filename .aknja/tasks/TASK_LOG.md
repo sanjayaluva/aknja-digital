@@ -510,6 +510,27 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   docs/43 deployment record, STATUS.md LIVE row.
 - status: COMPLETED — production LIVE; instance-2 + CI/CD workflow next.
 
+## T-022 — production login provisioning + verification
+
+- context: founder asked for user login credentials. Public login attempt
+  returned 401 — root cause: the super admin is NOT auto-created on
+  startup; it is a CLI step (`python -m app.cli create-super-admin`) that
+  dev had run but the prod bootstrap had not.
+- fix on prod (scripts/t022a_provision_admin.py):
+  create-super-admin (founder@aknja.internal, tenant
+  50315d27-b612-4a1c-b35d-d927b7fa290c) + `seed` (49 settings, 10
+  capabilities, 5 tools) + `import-taxonomy` (19 families, 76
+  subcategories, 224 services) — dev parity.
+- verification (public): POST /api/v1/auth/login → 200 SUPER_ADMIN session
+  cookie; GET / → 302 /admin; GET /admin → 200 "Overview — Aknja Digital".
+- facts: exactly ONE login exists today (the founder super-admin;
+  BOOTSTRAP_ADMIN_* in .env / .env.production). No user-management or
+  client-portal account flow in the console yet — additional users would
+  need a CLI `create_user` path or a future console feature.
+- ops note: deploy runbook for new instances must include the three CLI
+  provisioning steps after migrations.
+- status: COMPLETED.
+
 ## Open items (next rounds)
 
 - Founder console confirmations: gemini/groq current free-tier numbers
