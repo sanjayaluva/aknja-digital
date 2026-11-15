@@ -145,7 +145,33 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   acceptance criterion above
 - failure_reason: —
 
+## T-007 — Playwright E2E + visual comparison (this round)
+
+- task_id: T-007 · capability: software_engineer
+- goal: real-browser E2E for critical admin/client workflows and
+  screenshot-vs-baseline visual comparison per docs/16.
+- inputs: docs/16, docs/32 Epic G, SRS §14
+- acceptance_criteria: critical workflows (auth, lead→qualify, task
+  delivery, approval decision, portal feedback, RBAC boundaries, audit
+  visibility) pass in Chromium against the real app; visual diff at
+  agreed breakpoints (1280×800; login 390×844) against committed
+  baselines with explicit tolerance and documented dynamic-content
+  exclusions; layer skips cleanly without Chromium; existing suite
+  unaffected.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `tests/e2e/` (harness + 11 functional + 8 visual tests),
+  `tests/e2e/baselines/*.png` (8), regression tests in
+  `tests/test_ui.py` (+2); product fixes found by E2E:
+  login urlencoded-form support, validation-error sanitizer,
+  `request.state.principal` wiring (sidebar + CSRF tokens),
+  audit NULL-tenant visibility, logout `HX-Redirect`, stable ordering
+  (providers page, catalog relationships)
+- verification_evidence: 153 tests passing (twice, stable), ruff clean;
+  visual compare mode deterministic across fresh runs (0.0000% diff);
+  comparator sensitivity verified (synthetic 5.86% change caught)
+- failure_reason: —
+
 ## Open items (next rounds)
 
-- T-007 (candidate): Playwright E2E + visual comparison (docs/16)
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

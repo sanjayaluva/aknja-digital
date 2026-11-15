@@ -147,3 +147,25 @@ def test_settings_page_lists_all_tabs(db, seed, admin_client) -> None:
     html = admin_client.get("/admin/settings").text
     for fragment in ("Brand", "Commercial", "Ai Quota", "Qa Gates", "Hitl", "Leads", "Sdlc"):
         assert fragment in html, f"missing settings tab: {fragment}"
+
+
+def test_login_accepts_urlencoded_form(client, seed) -> None:
+    """htmx serializes the login form as urlencoded, not JSON — the API must
+    accept both (regression: found by E2E T-007, browser login 422'd)."""
+    resp = client.post(
+        "/api/v1/auth/login",
+        data={"email": seed.admin.email, "password": "FounderPass#1"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert "aknja_session" in resp.cookies
+
+
+def test_validation_error_is_clean_422(client, seed) -> None:
+    """A 422 must return the JSON envelope, never crash into a 500
+    (regression: bytes body crashed json.dumps in the error handler)."""
+    resp = client.post(
+        "/api/v1/auth/login",
+        data={"email": seed.admin.email, "password": "short"},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"

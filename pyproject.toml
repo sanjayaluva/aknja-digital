@@ -34,3 +34,4 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["e2e: real-browser end-to-end tests (Playwright + uvicorn)"]

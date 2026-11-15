@@ -41,12 +41,15 @@ alembic upgrade head
 python -m app.cli create-super-admin --email founder@aknja.pp.ua
 python -m app.cli seed && python -m app.cli import-taxonomy && python -m app.cli verify-install
 uvicorn app.main:app --reload  # /admin · /portal · /api/docs · /health/ready
-pytest -q                      # 80 tests against real PostgreSQL
+pytest -q                      # 153 tests against real PostgreSQL
+                               # (incl. Playwright E2E + visual baselines;
+                               #  AKNJA_E2E=skip disables the browser layer,
+                               #  AKNJA_E2E_UPDATE_BASELINES=1 regenerates them)
 ```
 
 ## Important status statement
 
-The core application is implemented and covered by tests (see `.aknja/STATUS.md`). It has **not** been deployed to staging or production, and no live provider accounts, quotas, secrets, OCI tenancy quotas, domains, or production capacity have been inspected or verified. Provider entries remain candidates until verified in the actual account. Playwright E2E, visual verification and live Telegram delivery are specified but not yet wired.
+The core application is implemented and covered by tests (see `.aknja/STATUS.md`). It has **not** been deployed to staging or production, and no live provider accounts, quotas, secrets, OCI tenancy quotas, domains, or production capacity have been inspected or verified. Provider entries remain candidates until verified in the actual account. Live Telegram delivery and staging/production deployment are specified but not wired; real-browser E2E and visual verification ARE wired (tests/e2e, T-007).
 
 ## Technology baseline
 
@@ -69,4 +72,5 @@ Single backend: **FastAPI + SQLAlchemy 2.x (sync, ADR-007) + Alembic + PostgreSQ
 - `infra/`: deployment templates and scripts.
 - `docs/`: human-readable product, engineering and operational documentation.
 - `tests/`: pytest suite (runs against real PostgreSQL).
+- `tests/e2e/`: Playwright E2E + visual baselines (own scratch DB `pgdata-aknja-e2e`; needs `playwright install chromium`).
 - Secrets, client production data, raw database dumps, private keys and runtime logs must never be committed.

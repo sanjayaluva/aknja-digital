@@ -107,9 +107,24 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_req: Request, exc: RequestValidationError) -> JSONResponse:
+        # pydantic error dicts can carry raw bytes (urlencoded body) or
+        # exception objects in ctx — sanitize or json.dumps raises and turns
+        # a 422 into a 500.
+        def _clean(value: object) -> object:
+            if isinstance(value, bytes):
+                return value.decode("utf-8", "replace")
+            if isinstance(value, dict):
+                return {k: _clean(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [_clean(v) for v in value]
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            return str(value)
+
         return JSONResponse(
             status_code=422,
-            content=_envelope("VALIDATION_ERROR", "Request validation failed", {"errors": exc.errors()}),
+            content=_envelope("VALIDATION_ERROR", "Request validation failed",
+                              {"errors": [_clean(e) for e in exc.errors()]}),
         )
 
     @app.exception_handler(Exception)

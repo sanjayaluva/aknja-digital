@@ -10,6 +10,7 @@ import uuid
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import or_
 
 from app.core.enums import ApprovalStatus, LeadStatus, ProjectLifecycleState, TaskStatus
 from app.core.security import constant_time_equals
@@ -283,7 +284,7 @@ def catalog_page(request: Request, search: str = ""):
         categories = db.scalars(
             select(ServiceCategory)
             .where(ServiceCategory.tenant_id == principal.tenant_id)
-            .order_by(ServiceCategory.domain, ServiceCategory.sort_order)
+            .order_by(ServiceCategory.domain, ServiceCategory.sort_order, ServiceCategory.code)
         ).all()
         tree = []
         for category in categories:
@@ -568,7 +569,15 @@ def audit_page(request: Request):
 
         rows = db.scalars(
             select(AuditEvent)
-            .where(AuditEvent.tenant_id == principal.tenant_id)
+            .where(
+                or_(
+                    AuditEvent.tenant_id == principal.tenant_id,
+                    # system-level events (e.g. auth.login) are recorded with
+                    # tenant_id NULL — excluding them hid every login event
+                    # from the audit console (found by E2E T-007)
+                    AuditEvent.tenant_id.is_(None),
+                )
+            )
             .order_by(AuditEvent.id.desc())
             .limit(100)
         ).all()
@@ -662,12 +671,16 @@ def providers_page(request: Request):
         from app.modules.resources.models import ProviderAccount, ProviderProduct
 
         accounts = db.scalars(
-            select(ProviderAccount).where(ProviderAccount.tenant_id == principal.tenant_id)
+            select(ProviderAccount)
+            .where(ProviderAccount.tenant_id == principal.tenant_id)
+            # stable UI ordering: heap order otherwise varies between runs
+            .order_by(ProviderAccount.provider)
         ).all()
         products = db.execute(
             select(ProviderProduct)
             .join(ProviderAccount, ProviderProduct.account_id == ProviderAccount.id)
             .where(ProviderAccount.tenant_id == principal.tenant_id)
+            .order_by(ProviderProduct.category, ProviderProduct.product_key)
         ).scalars().all()
         stop = governance.get_emergency_stop(db)
         return render(

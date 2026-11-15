@@ -92,6 +92,12 @@ def db(engine):
 def app():
     reset_engine()
     os.environ["DATABASE_URL"] = _DATABASE_URL
+    # get_settings is lru-cached process-wide: clear it or the app binds to
+    # whichever database a previously-run fixture (e.g. the E2E harness)
+    # cached.
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
     from app.main import create_app
 
     application = create_app()

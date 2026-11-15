@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ValidationError
 
 from app.api.deps import SESSION_COOKIE, CurrentPrincipal, DbDep
 from app.core.config import get_settings
@@ -30,8 +32,26 @@ class SessionInfo(BaseModel):
     csrf_token: str
 
 
+async def _login_body(request: Request) -> LoginRequest:
+    """Accept BOTH JSON (API clients) and urlencoded bodies (the htmx login
+    form serializes form fields as application/x-www-form-urlencoded — a
+    JSON-only signature broke every real-browser login; found by E2E T-007).
+    """
+    ctype = request.headers.get("content-type", "")
+    if "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
+        data = dict(await request.form())
+    else:
+        data = await request.json()
+    try:
+        return LoginRequest.model_validate(data)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors(), body=data) from exc
+
+
 @router.post("/login")
-def login(body: LoginRequest, request: Request, db: DbDep) -> JSONResponse:
+def login(
+    request: Request, db: DbDep, body: Annotated[LoginRequest, Depends(_login_body)]
+) -> JSONResponse:
     user = identity.authenticate(db, email=body.email, password=body.password)
     token, session = identity.create_session(
         db,
@@ -85,6 +105,9 @@ def logout(db: DbDep, principal: CurrentPrincipal) -> JSONResponse:
     )
     resp = JSONResponse({"status": "logged_out"})
     resp.delete_cookie(SESSION_COOKIE)
+    # htmx honour redirect: without this the browser stays on the (now stale)
+    # console page after sign-out — found by real-browser E2E (T-007)
+    resp.headers["HX-Redirect"] = "/login"
     return resp
 
 

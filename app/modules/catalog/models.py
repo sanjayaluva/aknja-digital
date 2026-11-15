@@ -45,7 +45,7 @@ class ServiceCategory(Base, TimestampMixin):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     subcategories: Mapped[list[ServiceSubcategory]] = relationship(
-        back_populates="category", order_by="ServiceSubcategory.sort_order"
+        back_populates="category", order_by="ServiceSubcategory.sort_order, ServiceSubcategory.code"
     )
 
 
@@ -65,7 +65,7 @@ class ServiceSubcategory(Base, TimestampMixin):
 
     category: Mapped[ServiceCategory] = relationship(back_populates="subcategories")
     services: Mapped[list[Service]] = relationship(
-        back_populates="subcategory", order_by="Service.sort_order"
+        back_populates="subcategory", order_by="Service.sort_order, Service.name"
     )
 
 
