@@ -189,12 +189,17 @@ def _adapter_github_models(
 
 
 def _adapter_gemini(prompt: str, model: str, key: str, settings: Settings, client: httpx.Client) -> str:
-    # 2.5-flash is retired for new users (404 guidance names gemini-3.8-flash,
-    # 2026-11 live run). NOTE (T-023g): generateContent is region-blocked for
-    # this account from the sandbox AND the OCI egress ("User location is not
-    # supported" / silent drop) — keep the product disabled until the founder
-    # verifies from an allowed region (docs/33).
-    resolved = model or "gemini-3.8-flash"
+    # Model choice is live-verified against the free tier (T-024f matrix,
+    # 2026-11-15, from the OCI Mumbai egress): the key is valid and India is
+    # NOT blocked (models list 200, gemma-4-31b-it generateContent 200), but
+    # the current gemini-3.x-flash models are capacity-starved — the
+    # non-streaming endpoint black-holes (no response at all, >120s) while
+    # streamGenerateContent honestly returns 503 "high demand". Default to
+    # gemma-4-31b-it, which serves fine on the same key; pass an explicit
+    # model to use the flash line when capacity clears. (The T-023g
+    # "region block" note was wrong: the sandbox egress is Hong Kong, which
+    # is separately blocked with a clean 400 for every authenticated call.)
+    resolved = model or "gemma-4-31b-it"
     payload = _request_json(
         client, "POST", "gemini",
         f"https://generativelanguage.googleapis.com/v1beta/models/{resolved}:generateContent",
@@ -522,7 +527,7 @@ def _default_model(provider: str) -> str:
     return {
         "groq": "openai/gpt-oss-20b",  # namespaced ids after llama-default retirement (2026-11)
         "github_models": "openai/gpt-4o-mini",
-        "gemini": "gemini-3.8-flash",  # 2.5-flash retired for new users (2026-11)
+        "gemini": "gemma-4-31b-it",  # flash line capacity-starved on the free tier (T-024f)
         "cloudflare_workers_ai": "@cf/meta/llama-3.1-8b-instruct",
         "openrouter": "inclusionai/ling-3.2-flash:free",
         "mistral": "mistral-small-latest",
