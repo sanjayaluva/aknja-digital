@@ -69,3 +69,52 @@ tokens (Object Read & Write) cannot create buckets
 
 Redeploy the prior commit through the same workflow; restore SQLite from the
 latest R2 backup per docs/22 if data rollback is required.
+
+## Deployment record — 2026-11-15 (instance 1 = production, LIVE)
+
+Verified facts (first SSH login):
+
+- instance 1 `ubuntu@144.24.102.22` (aknja.pp.ua): aarch64, Ubuntu 22.04.5,
+  kernel 6.8.0-1049-oracle, Python 3.10 system.
+- instance 2 `ubuntu@80.225.208.59`: aarch64, Ubuntu 24.04.5,
+  kernel 6.17.0-1011-oracle, Python 3.12.3 system.
+- Both: 1 OCPU, in-OS iptables default-REJECT except 22 (OCI Ubuntu image
+  default) — rules for 80/443 inserted and persisted on instance 1.
+- SSH from the dev sandbox has no openssh client; deploys use paramiko with
+  the founder's key (kept at gitignored `upload/oci_key.pem`).
+
+Production stack deployed on instance 1 (phased script
+`scripts/t021d_deploy_prod.py`, artifacts in `infra/oci/`):
+
+- PostgreSQL 14 (role/db `aknja`, scram, localhost only) + alembic x5
+  migrations applied.
+- uv-managed CPython 3.12.16 (aarch64) + `uv sync --frozen --no-dev`
+  (all wheels available for linux-aarch64).
+- `aknja.service`: uvicorn on 127.0.0.1:8000 (systemd, Restart=always).
+- Caddy reverse proxy, automatic Let's Encrypt TLS for aknja.pp.ua;
+  HTTP 80 → 308 → HTTPS.
+- `aknja-notifications.timer` (outbox every 5 min) and
+  `aknja-backup.timer` (02:30 UTC: create → push → prune, offsite to R2).
+- Prod `.env` generated from the dev `.env` with APP_ENV=production, fresh
+  DATABASE_URL/SECRET_KEY; recovery copy at gitignored `.env.production`.
+
+Verification: `https://aknja.pp.ua/healthz` → HTTP 200
+`{"status":"ok","version":"0.1.0","env":"production"}`, TLS verify 0,
+external path (OCI security list 80/443) green.
+
+Incident during deploy (fixed same day): the .env builder re-parsed the
+generated DATABASE_URL with `split(':')[-1]`, corrupting the DB password on
+re-run to "5432/aknja" → alembic auth failure. Fixed to parse between
+`aknja:` and `@` with sanity guards, plus an idempotent `ALTER ROLE` that
+always syncs the role password to `.env.production`; credentials regenerated
+and migration re-run clean.
+
+R2 permissions check (same day): the founder elevated the EXISTING R2 token
+(fingerprints identical to `.env`) — ListBuckets 200, test bucket
+create/visible/delete round-trip CONFIRMED. Bucket-creation rights work;
+`.env` unchanged. Default bucket `aknja-digital-artifacts` stays.
+
+Instance 2 remains clean — reserved for staging + restore-drill target +
+IndicTrans2 translation worker (docs/34 §3). The GitHub-Actions-over-SSH
+deploy workflow (this deploy ran via the persisted script) is the next
+increment; `infra/oci/` + the phased script are the reproducible base.

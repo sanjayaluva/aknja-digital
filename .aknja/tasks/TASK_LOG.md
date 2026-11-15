@@ -481,15 +481,46 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
 - status: COMPLETED (research + plan) / OCI EXECUTION BLOCKED on credential
   re-share.
 
+## T-021 — R2 permission check + OCI credentials + production deploy (this round)
+
+- goal: verify the founder's R2 permission update; SSH both OCI instances;
+  bootstrap production on instance 1 per docs/43.
+- inputs: re-uploaded `upload/aknja-credentials.txt` (workspace upload/,
+  local git only — no remote; not the app repo), OCI key extracted to
+  gitignored `upload/oci_key.pem`.
+- R2: same token as .env (fingerprints match) but now Admin-capable —
+  ListBuckets 200; test-bucket create/visible/delete round-trip CONFIRMED.
+  No .env change needed; default bucket stays.
+- inventory: both instances aarch64; inst-1 Ubuntu 22.04.5 (py3.10),
+  inst-2 Ubuntu 24.04.5 (py3.12); 1 OCPU each; in-OS iptables default
+  REJECT except 22.
+- deployed on inst-1: PG14 + role/db; uv CPython 3.12.16; uv sync --frozen
+  --no-dev; alembic x5; aknja.service (uvicorn 127.0.0.1:8000); Caddy +
+  auto-TLS aknja.pp.ua; iptables 80/443 persisted; notifications timer
+  (*/5min) + backup timer (02:30 UTC create→push→prune).
+- verification: https://aknja.pp.ua/healthz → 200
+  {"status":"ok","version":"0.1.0","env":"production"}, TLS valid,
+  308 http→https, OCI security list 80/443 confirmed open.
+- incident+fix: .env builder password re-parse bug (split(':')[-1] →
+  "5432/aknja") corrupted .env.production on re-run → alembic 28P01 auth
+  failure; fixed parse + idempotent ALTER ROLE sync; creds regenerated;
+  migrations clean. Lesson recorded: generated-secret re-parse must use
+  structured extraction, and db/env phases must force-sync the role.
+- deliverables: infra/oci/ (7 deploy artifacts), scripts/t021a–t021f,
+  docs/43 deployment record, STATUS.md LIVE row.
+- status: COMPLETED — production LIVE; instance-2 + CI/CD workflow next.
+
 ## Open items (next rounds)
 
 - Founder console confirmations: gemini/groq current free-tier numbers
   (allowances recorded conservatively) — [mistral item CLOSED 2026-11-15:
   provider retired the free tier]
-- OCI deployment per docs/43: BLOCKED on founder re-sharing instance access
-  (username, 2 x public IP, SSH private key — safe paths: chat or
-  upload/oci_key.pem, *.pem is gitignored); then: first-login arch check,
-  security-list ports 22/80/443, secrets to GitHub, CI/CD deploy workflow
+- Instance-2 bootstrap (staging + restore-drill target + IndicTrans2
+  translation worker) — production (inst-1) is LIVE per T-021/docs/43
+- GitHub-Actions-over-SSH deploy workflow for inst-1 (this deploy ran via
+  the persisted phased script; promote it to workflow_dispatch next)
+- external uptime monitor on https://aknja.pp.ua/healthz (UptimeRobot
+  candidate, docs/34) — needs founder account signup
 - openrouter translation re-run with the chosen free path: self-hosted
   IndicTrans2-dist-200M benchmark on the ml floor, Gemini-free comparison,
   then ungate translation — currently gated for translation

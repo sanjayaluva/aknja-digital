@@ -1,0 +1,8 @@
+[Unit]
+Description=Aknja outbox: process due notifications
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/aknja-digital
+ExecStart=/home/ubuntu/aknja-digital/.venv/bin/python -m app.cli process-notifications

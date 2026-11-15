@@ -1,0 +1,8 @@
+[Unit]
+Description=Aknja nightly backup: create, push offsite, prune
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/aknja-digital
+ExecStart=/bin/bash -c "/home/ubuntu/aknja-digital/.venv/bin/python -m app.cli backup create && /home/ubuntu/aknja-digital/.venv/bin/python -m app.cli backup push && /home/ubuntu/aknja-digital/.venv/bin/python -m app.cli backup prune"

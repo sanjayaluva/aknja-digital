@@ -1,0 +1,14 @@
+[Unit]
+Description=Aknja Digital production app (uvicorn)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/aknja-digital
+ExecStart=/home/ubuntu/aknja-digital/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
