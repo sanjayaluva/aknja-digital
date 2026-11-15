@@ -161,7 +161,7 @@ never egress to a third-party model.
 ```bash
 # Test a verified provider with one real completion (v5.3.2 §8 action):
 python -m app.cli llm-ping --provider groq
-python -m app.cli llm-ping --provider gemini --model gemini-2.5-flash \
+python -m app.cli llm-ping --provider gemini --model gemini-3.8-flash \
   --prompt "Reply with exactly: PONG"
 ```
 

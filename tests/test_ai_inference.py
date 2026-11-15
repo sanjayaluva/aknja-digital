@@ -38,6 +38,8 @@ def _settings(**overrides) -> Settings:
         "gemini_api_keys": "gemini-key-1",
         "cloudflare_api_token": "cf-key-1",
         "cloudflare_account_id": "cf-account",
+        "openrouter_api_key": "or-key-1",
+        "mistral_api_key": "mistral-key-1",
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)
@@ -125,6 +127,88 @@ def test_llm_success_via_verified_groq(db, seed) -> None:
     assert log.status == "SUCCEEDED"
     assert log.prompt_hash  # hash stored, never the raw prompt
     assert "ping" not in (log.error or "")
+
+
+def _openrouter_ok(request: httpx.Request) -> httpx.Response:
+    assert request.url.host == "openrouter.ai"
+    assert request.url.path == "/api/v1/chat/completions"
+    assert request.headers["Authorization"] == "Bearer or-key-1"
+    import json as _json
+
+    assert _json.loads(request.read())["model"].endswith(":free")  # only :free slugs
+    return httpx.Response(
+        200, json={"choices": [{"message": {"content": "PONG from openrouter"}}]}
+    )
+
+
+def _mistral_ok(request: httpx.Request) -> httpx.Response:
+    assert request.url.host == "api.mistral.ai"
+    assert request.url.path == "/v1/chat/completions"
+    assert request.headers["Authorization"] == "Bearer mistral-key-1"
+    return httpx.Response(
+        200, json={"choices": [{"message": {"content": "PONG from mistral"}}]}
+    )
+
+
+@pytest.mark.parametrize(
+    "provider,handler,expected_model",
+    [
+        ("openrouter", _openrouter_ok, "inclusionai/ling-3.2-flash:free"),
+        ("mistral", _mistral_ok, "mistral-small-latest"),
+    ],
+)
+def test_llm_success_via_verified_openai_compatible(
+    db, seed, provider, handler, expected_model
+) -> None:
+    register_candidate_providers(db, seed.tenant.id)
+    _verify_provider(db, seed, provider)
+    result = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(), http_client=_mock_client(handler),
+    )
+    assert result.status == "SUCCEEDED"
+    assert result.text == f"PONG from {provider}"
+    assert result.provider == provider
+    assert result.model == expected_model
+    log = db.scalar(select(LLMCallLog).order_by(LLMCallLog.created_at.desc()))
+    assert log is not None and log.status == "SUCCEEDED"
+
+
+def test_slow_provider_stream_hits_total_budget(db, seed, monkeypatch) -> None:
+    """A trickling free-tier stream must fail at the TOTAL budget, not hang.
+
+    Live finding 2026-11-15: an oversubscribed :free model streamed one
+    completion for 7+ minutes — per-read timeouts never fire when chunks
+    keep arriving. The total-budget guard bounds the request wall-clock.
+    """
+    import time as _time
+
+    from app.modules.ai import inference as inference_module
+
+    register_candidate_providers(db, seed.tenant.id)
+    _verify_provider(db, seed, "openrouter")
+
+    def trickler(request: httpx.Request) -> httpx.Response:
+        def endless() -> bytes:
+            while True:
+                yield b'{"partial": "trickle"}'
+                _time.sleep(0.05)
+
+        return httpx.Response(200, content=endless())
+
+    monkeypatch.setattr(inference_module, "_total_budget_s", lambda s: 0.15)
+    result = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(), http_client=_mock_client(trickler),
+    )
+    # retryable exhaustion under a targeted provider parks fail-closed,
+    # but the reason must name the budget — never a hang.
+    assert result.status == "PENDING_MANUAL"
+    assert any("budget" in (a.get("reason") or "") for a in result.attempts)
+    failed_logs = db.scalars(
+        select(LLMCallLog).where(LLMCallLog.status == "FAILED")
+    ).all()
+    assert any("budget" in (log.error or "") for log in failed_logs)
 
 
 def test_llm_failover_on_429_to_next_provider(db, seed) -> None:

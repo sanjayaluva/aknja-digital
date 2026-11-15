@@ -352,6 +352,106 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   0 unused / 0 undeclared / 0 unresolved
 - failure_reason: —
 
+## T-016 — Founder credentials wiring + Telegram live attempt (this round)
+
+- goal: wire the founder's uploaded credential sheet into the platform
+  (gitignored .env, never committed) and attempt live Telegram delivery.
+- inputs: upload/aknja-credentials.txt (via scripts/build_env.py mapper),
+  docs/39, .env.example slot map
+- acceptance_criteria: .env generated 600/gitignored with every sheet value
+  mapped to its platform slot; Settings accepts TELEGRAM_FOUNDER_CHAT_ID as
+  an alias of TELEGRAM_ADMIN_CHAT_ID; live send-test-notification executed.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED (platform side) / EXTERNALLY BLOCKED (live delivery)
+- artifacts: scripts/build_env.py (sheet→.env mapper, values never printed),
+  scripts/live_ops.py (pgserver-backed live CLI driver), config.py
+  AliasChoices + populate_by_name, tests/test_config_env.py (3)
+- verification_evidence: 18 tests green (alias + notifications); live run:
+  outbox enqueued → real Telegram API round trip → 401 Unauthorized (also
+  confirmed by direct getMe curl with the exact .env token; token shape
+  valid 46-char bot_id:hash) — the token is dead/revoked on Telegram's
+  side, platform chain (alias→.env→outbox→API→terminal FAILED + audit)
+  worked exactly as designed. Founder needs a fresh @BotFather token.
+
+## T-017 — LLM provider live activation + inference hardening (this round)
+
+- goal: activate the sheet's LLM keys through the audited registry path and
+  produce the first REAL benchmark evidence run.
+- inputs: GEMINI (main+backup)/GROQ/CEREBRAS/OPENROUTER/MISTRAL/HF keys,
+  docs/41 §9 workflow, docs/33 worksheet rules
+- acceptance_criteria: providers verified+enabled only via verify-provider
+  with recorded evidence; at least one real completion through the governed
+  layer; a completed real benchmark record.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED (openrouter live; region/plan blocks documented for others)
+- artifacts: openrouter+mistral adapters (`_openai_compatible`-based, :free
+  slug rule enforced), config fields, default models (gemini-3.8-flash after
+  live 404 retirement of 2.5-flash; inclusionai/ling-3.2-flash:free as the
+  live-proven openrouter default), tests (4 incl. budget guard), total
+  request-budget stream guard in `_request_json` (live finding: a :free
+  model trickled one completion 7+ minutes — per-read timeouts cannot bound
+  trickling streams; now every provider call is streamed under one
+  wall-clock budget, retryable so failover moves on)
+- verification_evidence: registry verified+enabled: gemini(250/day
+  conservative)/groq(1000/day)/openrouter(50/day)/mistral(1000/day) with
+  full evidence strings in the audit ledger. Live probes: gemini key valid
+  but region-blocked (400 FAILED_PRECONDITION 'User location is not
+  supported'); groq key valid but edge-403; cerebras edge-403; mistral key
+  valid but x-ratelimit-limit-req-minute: 0 (plan has no chat quota);
+  openrouter LIVE: governed llm-ping PONG 1434 ms (quota→audit→call log);
+  FIRST REAL BENCHMARK record 1f67d6fc (openrouter/ling-3.2-flash:free):
+  classification 100% PASS (4/4), translation 75% FAIL (floor 100%, one ml
+  scenario) → §6 gate active for translation until a passing re-run.
+
+## T-018 — Offsite backups on Cloudflare R2 (docs/22 §5A) (this round)
+
+- goal: implement + live-verify offsite backup copies to the verified R2
+  candidate without adding boto3 to the dependency surface.
+- inputs: R2 S3 credentials (access key/secret/bucket) from the founder
+  sheet, docs/22 off-host copy requirement
+- acceptance_criteria: push (dump+manifest) and offsite restore drill
+  working against real R2; unit tests for signing/roundtrip/tamper; new
+  columns migrated.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: app/modules/ops/offsite.py (hand-rolled SigV4 + upload/download/
+  push/pull with audit `backup.offsite_pushed` + idempotent double-push
+  guard), migration e5f7a1b3c9d2 (backup_records.offsite_key/offsite_at),
+  CLI `aknja backup push` / `backup offsite-drill`, tests/test_offsite.py (4
+  incl. SigV4 golden pin + tamper rejection)
+- verification_evidence: LIVE R2 roundtrip 2026-11-15 — push OK (dump +
+  manifest to backups/ prefix), download OK (sha256 verified, manifest
+  present), isolated offsite restore drill PASSED in 234 ms
+  (counts/schema/audit_chain ok). Note: the sheet's bucket name
+  `agency-artifacts` does not exist in the account (NoSuchBucket; the S3
+  token also lacks CreateBucket rights) — the existing
+  `aknja-digital-artifacts` bucket (documented default) is used instead;
+  founder may rename later. Full suite 189/189 with the new columns.
+
+## T-019 — Modal token verification + hosting path (this round)
+
+- goal: verify the founder's Modal token and record the staging path it
+  unlocks.
+- inputs: MODAL_TOKEN_ID/SECRET from the sheet, docs/19 + docs/38 hosting
+  admission
+- acceptance_criteria: token authenticates against api.modal.com.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED (verification) / staging deployment awaits founder go
+- artifacts: none in-repo (scratch venv /tmp/modal-venv; token stored in
+  gitignored .env as MODAL_TOKEN_ID/MODAL_TOKEN_SECRET per .env.example)
+- verification_evidence: `modal token set` verified the token against
+  https://api.modal.com; `modal profile current` → workspace `sanjayaluva`.
+  No OCI credentials exist in the sheet, so T-009 (OCI Always-Free staging)
+  stays open; Modal is the verified alternative (web deployment of the
+  FastAPI app + bundled PostgreSQL per docs/19 admission checklist).
+
 ## Open items (next rounds)
 
-- T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)
+- Fresh TELEGRAM_BOT_TOKEN from @BotFather (current one rejected 401), then
+  re-run: aknja send-test-notification (T-016 external blocker)
+- Founder console confirmations: mistral plan chat quota (limit=0), gemini/
+  groq current free-tier numbers (allowances recorded conservatively)
+- Staging deployment decision: Modal (token verified) vs OCI (no
+  credentials in sheet) — needs founder go per docs/19/docs/38
+- openrouter translation re-run (needs a stronger :free model or the ml
+  translation floor evidence) — provider currently gated for translation

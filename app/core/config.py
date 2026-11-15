@@ -12,7 +12,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,9 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # alias'd fields (telegram_admin_chat_id) stay constructible by field
+        # name — tests and internal callers rely on that.
+        populate_by_name=True,
     )
 
     app_name: str = "Aknja Digital"
@@ -54,7 +57,13 @@ class Settings(BaseSettings):
     # --- Optional integrations (disabled until verified per SRS §14) ---
     ai_provider_enabled: bool = False
     telegram_bot_token: SecretStr = SecretStr("")
-    telegram_admin_chat_id: str = ""
+    # TELEGRAM_ADMIN_CHAT_ID is the documented name (docs/39); the founder's
+    # credential sheet uses TELEGRAM_FOUNDER_CHAT_ID — accept both, no restart
+    # of the sheet's vocabulary required.
+    telegram_admin_chat_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("telegram_admin_chat_id", "telegram_founder_chat_id"),
+    )
 
     # --- Layer-1 free LLM provider credentials (SRS §9, v5.3.2 §5C).
     # Keys alone enable nothing: the registry must also hold a FREE_VERIFIED,
@@ -64,6 +73,8 @@ class Settings(BaseSettings):
     github_models_token: SecretStr = SecretStr("")
     cloudflare_api_token: SecretStr = SecretStr("")     # Workers AI (+ Pages)
     cloudflare_account_id: str = ""                     # same account as R2
+    openrouter_api_key: SecretStr = SecretStr("")       # only :free model slugs
+    mistral_api_key: SecretStr = SecretStr("")          # La Plateforme free plan
     llm_default_timeout_s: int = 20
 
     # --- Upload limits ---

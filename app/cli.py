@@ -659,6 +659,96 @@ def cmd_backup_prune(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_backup_push(args: argparse.Namespace) -> int:
+    """Upload a backup artifact + manifest offsite (docs/22 §5A, R2/S3)."""
+    db = get_session_local()()
+    try:
+        from app.core.config import get_settings
+        from app.modules.ops.backup import _latest_records
+        from app.modules.ops.models import BackupRecord
+        from app.modules.ops.offsite import offsite_target, push_backup_offsite
+
+        if offsite_target() is None:
+            print("offsite storage NOT CONFIGURED — set OBJECT_STORAGE_ENDPOINT, "
+                  "OBJECT_STORAGE_BUCKET, OBJECT_STORAGE_ACCESS_KEY_ID and "
+                  "OBJECT_STORAGE_SECRET_ACCESS_KEY (docs/22 §5A)")
+            return 1
+        if args.id:
+            record = db.get(BackupRecord, args.id)
+            if record is None:
+                print(f"ERROR: no backup record with id {args.id}")
+                return 1
+        else:
+            pending = [
+                r for r in _latest_records(db, 50) if not r.offsite_key
+            ] or _latest_records(db, 1)
+            record = pending[0]
+        directory = Path(args.dir) if args.dir else Path(get_settings().backup_dir)
+        artifact = directory / record.storage_key
+        if not artifact.is_file():
+            print(f"ERROR: artifact missing locally: {artifact}")
+            return 1
+        key = push_backup_offsite(db, record, artifact=artifact)
+        print(f"offsite push OK {record.storage_key}")
+        print(f"  remote key: {key}")
+        print(f"  size      : {record.size_bytes / 1_048_576:.2f} MB")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_backup_offsite_drill(args: argparse.Namespace) -> int:
+    """Download an offsite backup, verify its checksum, restore-drill it."""
+    import tempfile
+
+    db = get_session_local()()
+    try:
+        from sqlalchemy import select
+
+        from app.modules.ops.backup import run_restore_drill
+        from app.modules.ops.models import BackupRecord
+        from app.modules.ops.offsite import pull_backup_offsite
+
+        query = select(BackupRecord).where(BackupRecord.offsite_key.is_not(None))
+        if args.backup:
+            query = query.where(BackupRecord.storage_key == args.backup)
+        else:
+            query = query.order_by(BackupRecord.created_at.desc())
+        record = db.scalars(query.order_by(BackupRecord.created_at.desc())).first()
+        if record is None:
+            print("no offsite backups recorded — run 'aknja backup push' first")
+            return 1
+        with tempfile.TemporaryDirectory(prefix="aknja-offsite-") as tmp:
+            dest = Path(tmp)
+            _artifact, remote_manifest = pull_backup_offsite(db, record, dest_dir=dest)
+            print(f"offsite download OK {record.storage_key} "
+                  f"(checksum verified, manifest={'yes' if remote_manifest else 'absent'})")
+            result = run_restore_drill(
+                db, storage_key=record.storage_key, backup_dir=dest,
+                drop_target=not args.keep_target,
+            )
+        status = "PASSED" if result.ok else "FAILED"
+        checks = (f"counts={'ok' if result.counts_match else 'MISMATCH'} "
+                  f"schema={'ok' if result.alembic_match else 'MISMATCH'} "
+                  f"audit_chain={'ok' if result.chain_valid else 'BROKEN'}")
+        print(f"offsite restore drill [{status}] {result.storage_key} "
+              f"({result.duration_ms} ms, target {result.target_db})")
+        print(f"  {checks}")
+        if result.reason:
+            print(f"  reason: {result.reason}")
+        return 0 if result.ok else 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def cmd_monitor_run(_args: argparse.Namespace) -> int:
     """Run all health checks; manage incidents; execute capped safe recovery."""
     db = get_session_local()()
@@ -828,6 +918,14 @@ def main(argv: list[str] | None = None) -> int:
     p_bp = backup_sub.add_parser("prune", parents=[p_bk_dir],
                                  help="delete old artifacts, never the last known-good backup")
     p_bp.add_argument("--keep", type=int, default=5, help="verified backups to retain (default 5)")
+    p_bpush = backup_sub.add_parser("push", parents=[p_bk_dir],
+                                    help="upload a backup + manifest offsite (R2/S3, docs/22 §5A)")
+    p_bpush.add_argument("--id", default=None, help="backup record UUID (default: newest without an offsite copy)")
+    p_bod = backup_sub.add_parser("offsite-drill", parents=[p_bk_dir],
+                                  help="download the offsite copy, verify checksum, restore drill")
+    p_bod.add_argument("backup", nargs="?", default=None, help="storage key (default: newest offsite)")
+    p_bod.add_argument("--keep-target", action="store_true", dest="keep_target",
+                       help="keep the scratch database after the drill")
 
     p_maint = sub.add_parser("maintenance", help="controlled write freeze (v5.3.2 §5A)")
     maint_sub = p_maint.add_subparsers(dest="subcommand", required=True)
@@ -878,6 +976,8 @@ def main(argv: list[str] | None = None) -> int:
         "backup verify": cmd_backup_verify,
         "backup drill": cmd_backup_drill,
         "backup prune": cmd_backup_prune,
+        "backup push": cmd_backup_push,
+        "backup offsite-drill": cmd_backup_offsite_drill,
         "maintenance on": cmd_maintenance_on,
         "maintenance off": cmd_maintenance_off,
         "maintenance status": cmd_maintenance_status,

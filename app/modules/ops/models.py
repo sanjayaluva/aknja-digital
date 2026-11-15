@@ -205,4 +205,8 @@ class BackupRecord(Base, TimestampMixin):
     encrypted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at_backup: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     restore_drilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Offsite copy (docs/22 §5A): remote object key + push timestamp; both
+    # NULL until the artifact has been pushed to S3-compatible storage.
+    offsite_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offsite_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")

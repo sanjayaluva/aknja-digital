@@ -19,6 +19,7 @@ FREE_VERIFIED + enabled before anything is admitted.
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -80,6 +81,56 @@ class LLMResult:
 # docs at research time; callers may always override via `model=`.
 
 
+def _total_budget_s(settings: Settings) -> float:
+    """TOTAL wall-clock budget per LLM HTTP request.
+
+    httpx per-read timeouts cannot bound a trickling free-tier response
+    (observed live 2026-11-15: an oversubscribed :free model streamed a
+    single completion for 7+ minutes, one chunk at a time). Requests are
+    therefore streamed under one explicit budget; over budget means the
+    provider is too slow and the error is retryable so failover moves on.
+    """
+    return max(60.0, settings.llm_default_timeout_s * 3.0)
+
+
+def _request_json(
+    client: httpx.Client,
+    method: str,
+    provider: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json_body: dict,
+    budget_s: float,
+) -> dict:
+    """One provider HTTP call; returns the parsed JSON body under a total budget."""
+    started = time.monotonic()
+    try:
+        with client.stream(method, url, headers=headers, json=json_body) as response:
+            if response.status_code == 429 or response.status_code >= 500:
+                raise LLMProviderError(
+                    provider, f"HTTP {response.status_code} (retryable)", retryable=True
+                )
+            if response.status_code >= 400:
+                body = response.read().decode(errors="replace")
+                raise LLMProviderError(
+                    provider, f"HTTP {response.status_code}: {body[:200]}", retryable=False
+                )
+            chunks: list[bytes] = []
+            for chunk in response.iter_bytes():
+                chunks.append(chunk)
+                if time.monotonic() - started > budget_s:
+                    raise LLMProviderError(
+                        provider,
+                        f"total request budget {budget_s:.1f}s exceeded "
+                        "(provider stream too slow)",
+                        retryable=True,
+                    )
+            return json.loads(b"".join(chunks))
+    except httpx.TimeoutException as exc:
+        raise LLMProviderError(provider, f"timeout: {exc}", retryable=True) from exc
+
+
 def _openai_compatible(
     *,
     provider: str,
@@ -89,25 +140,18 @@ def _openai_compatible(
     prompt: str,
     temperature: float,
     client: httpx.Client,
+    total_budget_s: float = 60.0,
 ) -> str:
-    response = client.post(
-        url,
+    payload = _request_json(
+        client, "POST", provider, url,
         headers={"Authorization": f"Bearer {api_key}"},
-        json={
+        json_body={
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
         },
+        budget_s=total_budget_s,
     )
-    if response.status_code in (429,) or response.status_code >= 500:
-        raise LLMProviderError(
-            provider, f"HTTP {response.status_code} (retryable)", retryable=True
-        )
-    if response.status_code >= 400:
-        raise LLMProviderError(
-            provider, f"HTTP {response.status_code}: {response.text[:200]}", retryable=False
-        )
-    payload = response.json()
     try:
         return str(payload["choices"][0]["message"]["content"])
     except (KeyError, IndexError, TypeError) as exc:
@@ -123,6 +167,7 @@ def _adapter_groq(prompt: str, model: str, key: str, settings: Settings, client:
         prompt=prompt,
         temperature=0.2,
         client=client,
+        total_budget_s=_total_budget_s(settings),
     )
 
 
@@ -137,23 +182,20 @@ def _adapter_github_models(
         prompt=prompt,
         temperature=0.2,
         client=client,
+        total_budget_s=_total_budget_s(settings),
     )
 
 
 def _adapter_gemini(prompt: str, model: str, key: str, settings: Settings, client: httpx.Client) -> str:
-    resolved = model or "gemini-2.5-flash"
-    response = client.post(
+    # 2.5-flash is retired for new users (API 404 guidance, 2026-11 live run).
+    resolved = model or "gemini-3.8-flash"
+    payload = _request_json(
+        client, "POST", "gemini",
         f"https://generativelanguage.googleapis.com/v1beta/models/{resolved}:generateContent",
         headers={"x-goog-api-key": key},
-        json={"contents": [{"parts": [{"text": prompt}]}]},
+        json_body={"contents": [{"parts": [{"text": prompt}]}]},
+        budget_s=_total_budget_s(settings),
     )
-    if response.status_code == 429 or response.status_code >= 500:
-        raise LLMProviderError("gemini", f"HTTP {response.status_code} (retryable)", retryable=True)
-    if response.status_code >= 400:
-        raise LLMProviderError(
-            "gemini", f"HTTP {response.status_code}: {response.text[:200]}", retryable=False
-        )
-    payload = response.json()
     try:
         return str(payload["candidates"][0]["content"]["parts"][0]["text"])
     except (KeyError, IndexError, TypeError) as exc:
@@ -167,26 +209,50 @@ def _adapter_workers_ai(
     if not account:
         raise LLMProviderError("cloudflare_workers_ai", "CLOUDFLARE_ACCOUNT_ID is not set", retryable=False)
     resolved = model or "@cf/meta/llama-3.1-8b-instruct"
-    response = client.post(
+    payload = _request_json(
+        client, "POST", "cloudflare_workers_ai",
         f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{resolved}",
         headers={"Authorization": f"Bearer {key}"},
-        json={"messages": [{"role": "user", "content": prompt}]},
+        json_body={"messages": [{"role": "user", "content": prompt}]},
+        budget_s=_total_budget_s(settings),
     )
-    if response.status_code == 429 or response.status_code >= 500:
-        raise LLMProviderError(
-            "cloudflare_workers_ai", f"HTTP {response.status_code} (retryable)", retryable=True
-        )
-    if response.status_code >= 400:
-        raise LLMProviderError(
-            "cloudflare_workers_ai",
-            f"HTTP {response.status_code}: {response.text[:200]}",
-            retryable=False,
-        )
-    payload = response.json()
     try:
         return str(payload["result"]["response"])
     except (KeyError, TypeError) as exc:
         raise LLMProviderError("cloudflare_workers_ai", f"unexpected response shape: {exc}") from exc
+
+
+def _adapter_openrouter(
+    prompt: str, model: str, key: str, settings: Settings, client: httpx.Client
+) -> str:
+    # Only `:free` slugs are admissible (SRS §8.4 Layer 1; registry note).
+    resolved = model or "inclusionai/ling-3.2-flash:free"  # live-proven 2026-11-15; gemma-4 :free 400s in restricted regions
+    return _openai_compatible(
+        provider="openrouter",
+        url="https://openrouter.ai/api/v1/chat/completions",
+        api_key=key,
+        model=resolved,
+        prompt=prompt,
+        temperature=0.2,
+        client=client,
+        total_budget_s=_total_budget_s(settings),
+    )
+
+
+def _adapter_mistral(
+    prompt: str, model: str, key: str, settings: Settings, client: httpx.Client
+) -> str:
+    resolved = model or "mistral-small-latest"
+    return _openai_compatible(
+        provider="mistral",
+        url="https://api.mistral.ai/v1/chat/completions",
+        api_key=key,
+        model=resolved,
+        prompt=prompt,
+        temperature=0.2,
+        client=client,
+        total_budget_s=_total_budget_s(settings),
+    )
 
 
 ADAPTERS = {
@@ -194,6 +260,8 @@ ADAPTERS = {
     "github_models": _adapter_github_models,
     "gemini": _adapter_gemini,
     "cloudflare_workers_ai": _adapter_workers_ai,
+    "openrouter": _adapter_openrouter,
+    "mistral": _adapter_mistral,
 }
 
 
@@ -204,6 +272,8 @@ def _provider_key(provider: str, settings: Settings) -> str:
         "gemini": settings.gemini_api_keys,
         "github_models": settings.github_models_token,
         "cloudflare_workers_ai": settings.cloudflare_api_token,
+        "openrouter": settings.openrouter_api_key,
+        "mistral": settings.mistral_api_key,
     }.get(provider)
     secret = raw.get_secret_value() if raw is not None else ""
     return secret.split(",")[0].strip() if secret else ""
@@ -420,6 +490,8 @@ def _default_model(provider: str) -> str:
     return {
         "groq": "llama-3.3-70b-versatile",
         "github_models": "openai/gpt-4o-mini",
-        "gemini": "gemini-2.5-flash",
+        "gemini": "gemini-3.8-flash",  # 2.5-flash retired for new users (2026-11)
         "cloudflare_workers_ai": "@cf/meta/llama-3.1-8b-instruct",
+        "openrouter": "inclusionai/ling-3.2-flash:free",
+        "mistral": "mistral-small-latest",
     }.get(provider, provider)
