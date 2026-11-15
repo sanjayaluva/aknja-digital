@@ -191,15 +191,16 @@ def _adapter_github_models(
 def _adapter_gemini(prompt: str, model: str, key: str, settings: Settings, client: httpx.Client) -> str:
     # Model choice is live-verified against the free tier (T-024f matrix,
     # 2026-11-15, from the OCI Mumbai egress): the key is valid and India is
-    # NOT blocked (models list 200, gemma-4-31b-it generateContent 200), but
-    # the current gemini-3.x-flash models are capacity-starved — the
-    # non-streaming endpoint black-holes (no response at all, >120s) while
-    # streamGenerateContent honestly returns 503 "high demand". Default to
-    # gemma-4-31b-it, which serves fine on the same key; pass an explicit
-    # model to use the flash line when capacity clears. (The T-023g
-    # "region block" note was wrong: the sandbox egress is Hong Kong, which
-    # is separately blocked with a clean 400 for every authenticated call.)
-    resolved = model or "gemma-4-31b-it"
+    # NOT blocked (models list 200), but the current gemini-3.x-flash models
+    # are capacity-starved — the non-streaming endpoint black-holes (no
+    # response at all, >120s) while streamGenerateContent honestly returns
+    # 503 "high demand". Of the working models, gemma-4-26b-a4b-it (MoE, 4B
+    # active) is the fast one (2s PONG vs 15s on gemma-4-31b-it; neither
+    # supports disabling the thinking preamble, 400 INVALID_ARGUMENT). Pass
+    # an explicit model to reach the others. (The T-023g "region block" note
+    # was wrong: the sandbox egress is Hong Kong, which is separately
+    # blocked with a clean 400 for every authenticated call.)
+    resolved = model or "gemma-4-26b-a4b-it"
     payload = _request_json(
         client, "POST", "gemini",
         f"https://generativelanguage.googleapis.com/v1beta/models/{resolved}:generateContent",
@@ -539,7 +540,7 @@ def _default_model(provider: str) -> str:
     return {
         "groq": "openai/gpt-oss-20b",  # namespaced ids after llama-default retirement (2026-11)
         "github_models": "openai/gpt-4o-mini",
-        "gemini": "gemma-4-31b-it",  # flash line capacity-starved on the free tier (T-024f)
+        "gemini": "gemma-4-26b-a4b-it",  # fast MoE; flash line capacity-starved (T-024f)
         "cloudflare_workers_ai": "@cf/meta/llama-3.1-8b-instruct",
         "openrouter": "inclusionai/ling-3.2-flash:free",
         "mistral": "mistral-small-latest",

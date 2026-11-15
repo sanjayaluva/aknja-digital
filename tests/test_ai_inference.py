@@ -88,7 +88,7 @@ def _groq_ok(request: httpx.Request) -> httpx.Response:
 def _gemini_thinking_ok(request: httpx.Request) -> httpx.Response:
     """gemma-4 'it' shape: reasoning parts flagged thought=true, then the answer."""
     assert request.url.host == "generativelanguage.googleapis.com"
-    assert "gemma-4-31b-it" in str(request.url)
+    assert "gemma-4-26b-a4b-it" in str(request.url)
     return httpx.Response(200, json={"candidates": [{"content": {"parts": [
         {"text": "*   The user wants a translation.\n    *   Think step by step...",
          "thought": True},
