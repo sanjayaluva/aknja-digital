@@ -208,7 +208,19 @@ def _adapter_gemini(prompt: str, model: str, key: str, settings: Settings, clien
         budget_s=_total_budget_s(settings),
     )
     try:
-        return str(payload["candidates"][0]["content"]["parts"][0]["text"])
+        parts = payload["candidates"][0]["content"]["parts"]
+        # gemma-4 "it" models emit their reasoning first as parts flagged
+        # "thought": true — parts[0] is NOT the answer (live 2026-11-15: a
+        # translation benchmark scored 12% purely from parsing the thinking).
+        # Join the non-thought text parts; fall back to the first part for
+        # models that return a single plain part.
+        answer = "".join(
+            str(p["text"]) for p in parts
+            if isinstance(p, dict) and p.get("text") and not p.get("thought")
+        )
+        if not answer:
+            answer = str(parts[0]["text"])
+        return answer
     except (KeyError, IndexError, TypeError) as exc:
         raise LLMProviderError("gemini", f"unexpected response shape: {exc}") from exc
 

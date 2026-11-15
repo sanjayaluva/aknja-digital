@@ -85,6 +85,30 @@ def _groq_ok(request: httpx.Request) -> httpx.Response:
     )
 
 
+def _gemini_thinking_ok(request: httpx.Request) -> httpx.Response:
+    """gemma-4 'it' shape: reasoning parts flagged thought=true, then the answer."""
+    assert request.url.host == "generativelanguage.googleapis.com"
+    assert "gemma-4-31b-it" in str(request.url)
+    return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+        {"text": "*   The user wants a translation.\n    *   Think step by step...",
+         "thought": True},
+        {"text": "*   Consider the register and tone...", "thought": True},
+        {"text": "PONG from gemini"},
+    ]}}]})
+
+
+def test_llm_success_via_verified_gemini_skips_thought_parts(db, seed) -> None:
+    register_candidate_providers(db, seed.tenant.id)
+    _verify_provider(db, seed, "gemini")
+    result = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(), http_client=_mock_client(_gemini_thinking_ok),
+    )
+    assert result.status == "SUCCEEDED"
+    assert result.text == "PONG from gemini"
+    assert result.provider == "gemini"
+
+
 def test_llm_fails_closed_without_verified_provider(db, seed) -> None:
     register_candidate_providers(db, seed.tenant.id)
     db.commit()
