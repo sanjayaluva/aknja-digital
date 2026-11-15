@@ -118,7 +118,7 @@ def test_llm_success_via_verified_groq(db, seed) -> None:
     assert result.status == "SUCCEEDED"
     assert result.text == "PONG from groq"
     assert result.provider == "groq"
-    assert result.model == "llama-3.3-70b-versatile"
+    assert result.model == "openai/gpt-oss-20b"
     reservation = db.query(quota.QuotaReservation).filter_by(
         provider_product_id=product.id
     ).first()

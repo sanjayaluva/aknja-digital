@@ -159,11 +159,13 @@ def _openai_compatible(
 
 
 def _adapter_groq(prompt: str, model: str, key: str, settings: Settings, client: httpx.Client) -> str:
+    # Groq retired the un-namespaced llama defaults (404 model_not_found,
+    # 2026-11 live run); the namespaced gpt-oss line is the current free pool.
     return _openai_compatible(
         provider="groq",
         url="https://api.groq.com/openai/v1/chat/completions",
         api_key=key,
-        model=model or "llama-3.3-70b-versatile",
+        model=model or "openai/gpt-oss-20b",
         prompt=prompt,
         temperature=0.2,
         client=client,
@@ -187,7 +189,11 @@ def _adapter_github_models(
 
 
 def _adapter_gemini(prompt: str, model: str, key: str, settings: Settings, client: httpx.Client) -> str:
-    # 2.5-flash is retired for new users (API 404 guidance, 2026-11 live run).
+    # 2.5-flash is retired for new users (404 guidance names gemini-3.8-flash,
+    # 2026-11 live run). NOTE (T-023g): generateContent is region-blocked for
+    # this account from the sandbox AND the OCI egress ("User location is not
+    # supported" / silent drop) — keep the product disabled until the founder
+    # verifies from an allowed region (docs/33).
     resolved = model or "gemini-3.8-flash"
     payload = _request_json(
         client, "POST", "gemini",
@@ -514,7 +520,7 @@ def llm_complete(
 
 def _default_model(provider: str) -> str:
     return {
-        "groq": "llama-3.3-70b-versatile",
+        "groq": "openai/gpt-oss-20b",  # namespaced ids after llama-default retirement (2026-11)
         "github_models": "openai/gpt-4o-mini",
         "gemini": "gemini-3.8-flash",  # 2.5-flash retired for new users (2026-11)
         "cloudflare_workers_ai": "@cf/meta/llama-3.1-8b-instruct",
