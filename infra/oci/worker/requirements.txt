@@ -1,0 +1,10 @@
+# Translation worker (instance-2) — pinned to the versions validated 2026-11-15:
+# transformers 4.x is required (the IndicTrans2 custom code imports
+# transformers.onnx, removed in 5.x; 4.38.2 also fixes the beam-search cache
+# shape the 4.5x line broke with this model).
+torch>=2.4,<3
+transformers==4.38.2
+sentencepiece>=0.2,<1
+indic-nlp-library>=0.92,<1
+fastapi>=0.115,<1
+uvicorn>=0.30,<1

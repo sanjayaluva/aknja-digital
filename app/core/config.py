@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     cloudflare_account_id: str = ""                     # same account as R2
     openrouter_api_key: SecretStr = SecretStr("")       # only :free model slugs
     mistral_api_key: SecretStr = SecretStr("")          # La Plateforme free plan
+    # Self-hosted IndicTrans2-dist-200M translation worker (docs/34 §3):
+    # OpenAI-compatible shim on OCI instance-2, reached via the reverse SSH
+    # tunnel (localhost from instance-1's perspective).
+    indictrans2_base_url: str = "http://127.0.0.1:8001"
+    indictrans2_api_key: SecretStr = SecretStr("")      # shared bearer token
     llm_default_timeout_s: int = 20
 
     # --- Upload limits ---

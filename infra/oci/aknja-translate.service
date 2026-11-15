@@ -1,0 +1,18 @@
+[Unit]
+Description=Aknja translation worker (IndicTrans2-dist-200M, instance-2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/aknja-translate
+EnvironmentFile=/home/ubuntu/aknja-translate.env
+ExecStart=/home/ubuntu/aknja-translate/venv/bin/python -m uvicorn app:app \
+    --host 127.0.0.1 --port 8001 --workers 1
+Restart=always
+RestartSec=5
+# model load + startup calibration can take ~2 min on 1 OCPU
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

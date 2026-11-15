@@ -61,6 +61,11 @@ def _verify_provider(db, seed, provider: str, allowance: int = 1000) -> Provider
     )
     account.billing_state = BillingState.FREE_VERIFIED.value
     account.enabled = True
+    # Mirror the verify-provider CLI: verification evidence carries a
+    # timestamp, and admit_usage orders the pool by last_verified_at DESC.
+    from app.core.security import utcnow
+
+    account.last_verified_at = utcnow()
     product.allowance = allowance
     product.enabled = True
     record_snapshot(db, product, locally_metered=0)
@@ -213,8 +218,11 @@ def test_slow_provider_stream_hits_total_budget(db, seed, monkeypatch) -> None:
 
 def test_llm_failover_on_429_to_next_provider(db, seed) -> None:
     register_candidate_providers(db, seed.tenant.id)
-    groq = _verify_provider(db, seed, "groq")
+    # github first, groq second: the pool is ordered by last_verified_at
+    # DESC, so groq (verified most recently) is tried first, 429s, and the
+    # failover moves to github (v5.3.2 §3 step 14).
     _verify_provider(db, seed, "github_models")
+    groq = _verify_provider(db, seed, "groq")
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.groq.com":

@@ -255,6 +255,29 @@ def _adapter_mistral(
     )
 
 
+def _adapter_indictrans2(
+    prompt: str, model: str, key: str, settings: Settings, client: httpx.Client
+) -> str:
+    """Self-hosted IndicTrans2-dist-200M worker (docs/34 §3 decision).
+
+    The worker is an OpenAI-compatible shim (en<->{ml,hi,ta}) running on OCI
+    instance-2; reached over the reverse SSH tunnel, hence the localhost
+    default. Translation-only: its registry product carries
+    `capability_contract["tasks"] = ["translation"]` so the quota engine
+    never routes generic traffic to it.
+    """
+    return _openai_compatible(
+        provider="indictrans2",
+        url=f"{settings.indictrans2_base_url.rstrip('/')}/v1/chat/completions",
+        api_key=key,
+        model=model or "indictrans2-dist-200M",
+        prompt=prompt,
+        temperature=0.2,
+        client=client,
+        total_budget_s=_total_budget_s(settings),
+    )
+
+
 ADAPTERS = {
     "groq": _adapter_groq,
     "github_models": _adapter_github_models,
@@ -262,6 +285,7 @@ ADAPTERS = {
     "cloudflare_workers_ai": _adapter_workers_ai,
     "openrouter": _adapter_openrouter,
     "mistral": _adapter_mistral,
+    "indictrans2": _adapter_indictrans2,
 }
 
 
@@ -274,6 +298,7 @@ def _provider_key(provider: str, settings: Settings) -> str:
         "cloudflare_workers_ai": settings.cloudflare_api_token,
         "openrouter": settings.openrouter_api_key,
         "mistral": settings.mistral_api_key,
+        "indictrans2": settings.indictrans2_api_key,
     }.get(provider)
     secret = raw.get_secret_value() if raw is not None else ""
     return secret.split(",")[0].strip() if secret else ""
@@ -385,6 +410,7 @@ def llm_complete(
                 idempotency_key=f"llm:{uuid.uuid4()}",
                 product_id=target_product_id,
                 exclude_product_ids=exclude or None,
+                task=task,
             )
             if not decision.admitted:
                 if not result.attempts and target_provider is None:
@@ -494,4 +520,5 @@ def _default_model(provider: str) -> str:
         "cloudflare_workers_ai": "@cf/meta/llama-3.1-8b-instruct",
         "openrouter": "inclusionai/ling-3.2-flash:free",
         "mistral": "mistral-small-latest",
+        "indictrans2": "indictrans2-dist-200M",
     }.get(provider, provider)

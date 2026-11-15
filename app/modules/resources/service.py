@@ -190,6 +190,7 @@ def admit_usage(
     idempotency_key: str,
     product_id: uuid.UUID | None = None,
     exclude_product_ids: list[uuid.UUID] | None = None,
+    task: str | None = None,
 ) -> AdmissionDecision:
     """Reserve quota atomically from the best eligible free provider product.
 
@@ -199,6 +200,10 @@ def admit_usage(
     `product_id` targets one specific product (provider "Test provider"
     action / llm-ping); `exclude_product_ids` lets the LLM failover loop
     move away from providers that just returned 429/5xx (v5.3.2 §3).
+    `task` carries the docs/13 classify step: a product declaring
+    `capability_contract["tasks"]` serves ONLY those task profiles, and
+    task-specialized products are never picked for generic (task=None)
+    traffic such as the governed tool gateway.
     """
     settings = get_settings()
     if settings.zero_cost_mode:
@@ -251,6 +256,14 @@ def admit_usage(
 
     rejection_reasons: list[str] = []
     for product, account in rows:
+        # --- docs/13 classify step: task-scoped products ---
+        declared = (product.capability_contract or {}).get("tasks")
+        if declared is not None and (task is None or task not in declared):
+            rejection_reasons.append(
+                f"{product.product_key}: task contract {declared} excludes "
+                f"{'generic' if task is None else task} traffic"
+            )
+            continue
         if _breaker_open(db, product.id):
             rejection_reasons.append(f"{product.product_key}: circuit open")
             continue

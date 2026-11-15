@@ -1,0 +1,21 @@
+[Unit]
+Description=Aknja translate reverse SSH tunnel (instance-2 -> instance-1:8001)
+After=network-online.target aknja-translate.service
+Wants=network-online.target
+Requires=aknja-translate.service
+
+[Service]
+User=ubuntu
+ExecStart=/usr/bin/ssh -N -T \
+    -i /home/ubuntu/.ssh/tunnel_to_inst1 \
+    -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=3 \
+    -o StrictHostKeyChecking=accept-new \
+    -R 127.0.0.1:8001:127.0.0.1:8001 \
+    ubuntu@144.24.102.22
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

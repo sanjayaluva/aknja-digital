@@ -164,6 +164,22 @@ CANDIDATE_PROVIDERS: list[dict] = [
         ],
     },
     {
+        "provider": "indictrans2",
+        "category": ProviderCategory.AI_LLM,
+        "display_name": "Self-hosted IndicTrans2-dist-200M (OCI instance-2)",
+        "secret_ref": "INDICTRANS2_API_KEY + INDICTRANS2_BASE_URL",
+        "docs_url": "https://huggingface.co/ai4bharat/IndicTrans2-en-indic-dist-200M",
+        "note": "docs/34 §3 decision: self-hosted on our own OCI A1 instance "
+                "(MIT licence, dist-200M). Translation-only, en<->{ml,hi,ta}, "
+                "via an OpenAI-compatible worker shim. No vendor quota — the "
+                "allowance is self-imposed rate protection.",
+        "tasks": ["translation"],
+        "products": [
+            ("indictrans2-dist-200M translations/day", "requests", "requests", "DAILY",
+             "self-hosted, self-imposed", "verify worker /healthz + benchmark PASS"),
+        ],
+    },
+    {
         "provider": "mistral",
         "category": ProviderCategory.AI_LLM,
         "display_name": "Mistral free experiment plan",
@@ -536,19 +552,24 @@ def register_candidate_providers(db: Session, tenant_id: uuid.UUID) -> dict[str,
             if product is not None:
                 stats["skipped"] += 1
                 continue
+            contract = {
+                "candidate": True,
+                "provenance": candidate.get("source", "docs"),
+                "documented_allowance": documented,
+                "documented_note": doc_note,
+                "provider_note": candidate["note"],
+                "docs_url": candidate["docs_url"],
+            }
+            if candidate.get("tasks"):
+                # Task-scoped product (docs/13 classify step): the quota
+                # engine only routes the declared task profiles here.
+                contract["tasks"] = candidate["tasks"]
             db.add(
                 ProviderProduct(
                     account_id=account.id,
                     product_key=key,
                     category=category,
-                    capability_contract={
-                        "candidate": True,
-                        "provenance": candidate.get("source", "docs"),
-                        "documented_allowance": documented,
-                        "documented_note": doc_note,
-                        "provider_note": candidate["note"],
-                        "docs_url": candidate["docs_url"],
-                    },
+                    capability_contract=contract,
                     metric_key=metric,
                     allowance=0,  # unknown → fail closed until verified
                     unit=unit,
