@@ -1,0 +1,47 @@
+name: deploy
+
+# T-023 (docs/43): workflow_dispatch deploy over SSH. The runner holds the
+# dedicated deploy key (GitHub secret OCI_DEPLOY_KEY); on the instance the
+# key is restricted to the aknja-deploy.sh wrapper (command= in
+# authorized_keys), which only accepts a 40-char commit SHA.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "commit SHA to deploy (empty = current main HEAD)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Resolve SHA
+        id: sha
+        run: |
+          if [ -n "${{ github.event.inputs.sha }}" ]; then
+            echo "value=${{ github.event.inputs.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH (restricted key, command= wrapper)
+        env:
+          DEPLOY_KEY: ${{ secrets.OCI_DEPLOY_KEY }}
+        run: |
+          install -m 600 /dev/stdin ~/deploy_key <<< "$DEPLOY_KEY"
+          ssh -i ~/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=20 \
+              ubuntu@144.24.102.22 "${{ steps.sha.outputs.value }}"
+          rm -f ~/deploy_key
+
+      - name: External smoke check
+        run: |
+          curl -sf --max-time 30 https://aknja.pp.ua/healthz | tee /dev/stderr | grep '"env":"production"'
