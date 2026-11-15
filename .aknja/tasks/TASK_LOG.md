@@ -233,6 +233,37 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   structural (37 text-line bands 8–13px, canvas identical 1280×3152)
 - failure_reason: —
 
+## T-012 — CI hardening: uv lockfile, e2e job, portability (this round)
+
+- goal: make CI exercise the full system the way the sandbox does — locked
+  reproducible installs, real-browser E2E in CI, and tests free of
+  machine-specific assumptions (closes the docs/42 follow-ups 2+3 and Phase 5
+  leftovers; visual-baseline protocol documented and tool-supported).
+- inputs: docs/42 follow-ups, docs/16 (visual semantics), docs/41 runbook,
+  T-011 audit state, ci.yml, tests/conftest.py + tests/e2e/conftest.py
+- acceptance_criteria: uv.lock committed and CI installs via
+  `uv sync --frozen --all-extras`; a dedicated CI e2e job runs the 11
+  functional Playwright flows against the postgres service container;
+  conftest paths derived from the repo root (no /home/z hardcodes); e2e
+  honors AKNJA_E2E_DATABASE_URL; baseline regeneration protocol exists as a
+  committed tool with a drift-vs-regression verdict.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: uv.lock (83 packages), rewritten ci.yml (test job on uv +
+  `-m "not e2e"`, new e2e job with chromium + browser cache +
+  AKNJA_E2E_DATABASE_URL, security job unchanged), conftest portability fixes
+  (repo-relative pgdata dirs, _REPO_ROOT cwd, e2e external-DB override),
+  `infra/baseline_verify.py` (canvas/edge/band analysis, verdict + exit code),
+  docs/41 bootstrap/test/e2e/visual sections rewritten
+- verification_evidence: `uv sync --frozen --all-extras` + full suite 160/160
+  green in locked state (pytest-cov locked to 7.1.0); CI e2e code path proven
+  locally by simulation — external scratch DB via AKNJA_E2E_DATABASE_URL with
+  a live server: 11/11 functional flows pass; visual stability proven by two
+  consecutive pixel-identical runs; baseline_verify.py reproduces the T-011
+  admin-providers analysis (37 text-height bands, verdict drift-only, exit 0);
+  ruff clean
+- failure_reason: —
+
 ## Open items (next rounds)
 
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

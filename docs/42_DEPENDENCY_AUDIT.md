@@ -45,7 +45,13 @@ exists in our source. The audit tool records this limitation in
 1. **Visual baselines are time-fragile** — screens rendering dates (admin-providers)
    will drift again. Improvement: freeze/mask date regions in `_capture`, or
    re-baseline on a schedule.
-2. **e2e is not exercised in CI** — CI has no playwright/chromium job; a dedicated
-   `e2e` workflow job (playwright + `playwright install chromium`) would close the gap.
-3. **No lockfile** — resolution is range-based; a committed `uv.lock` (or constraints
-   file) would make deploys bit-reproducible and speed up CI.
+   *Update (T-012): root cause revised — the page renders no dates (seed
+   timestamps frozen at a constant); the drift was a chromium build change
+   affecting table-font rasterization. Baselines are environment-stable
+   (two consecutive runs pixel-identical); the drift-vs-regression protocol
+   is now tool-supported (`infra/baseline_verify.py`, docs/41 §5).*
+2. **e2e is not exercised in CI** — *resolved in T-012: dedicated CI e2e job
+   (chromium + `AKNJA_E2E_DATABASE_URL`) runs the 11 functional flows; visual
+   baselines deliberately stay local (font-stack-tied).*
+3. **No lockfile** — *resolved in T-012: `uv.lock` committed; CI installs via
+   `uv sync --frozen --all-extras`.*

@@ -8,10 +8,12 @@ locks). CI runs the same suite against a PostgreSQL service container.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # --- Environment must be pinned BEFORE any app import. ---
 _TEST_DB_NAME = "aknja_test"
-_PGDATA = "/home/z/my-project/pgdata-aknja"
+# Repo-relative cluster dir (gitignored) — never a machine-specific absolute path.
+_PGDATA = str(Path(__file__).resolve().parent.parent / "pgdata-aknja")
 
 if os.environ.get("AKNJA_TEST_DATABASE_URL"):
     _DATABASE_URL = os.environ["AKNJA_TEST_DATABASE_URL"]

@@ -13,8 +13,10 @@ CI (`.github/workflows/ci.yml`) runs the identical sequence on every push/PR.
 
 ```bash
 git clone https://github.com/sanjayaluva/aknja-digital.git && cd aknja-digital
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+# uv (https://docs.astral.sh/uv/) resolves the committed uv.lock bit-for-bit:
+uv sync --frozen --all-extras
+# without uv: python -m venv .venv && source .venv/bin/activate
+#             pip install -e ".[dev]"
 cp .env.example .env                     # then edit SECRET_KEY + DATABASE_URL
 ```
 
@@ -53,14 +55,28 @@ uvicorn app.main:app --reload
 ## 5. Test, lint, type checks
 
 ```bash
-pytest -q                # 80 tests against real PostgreSQL (see conftest notes)
+pytest -q                # 160 tests against real PostgreSQL (see conftest notes)
 ruff check app tests     # zero errors enforced in CI
 mypy app                 # advisory; strictness still being tightened
 ```
 
 The test suite requires PostgreSQL. It reads `AKNJA_TEST_DATABASE_URL` if set;
-otherwise it provisions a self-contained PostgreSQL (pgserver) or uses
-`DATABASE_URL`. CI provisions `postgres:16` as a service container.
+otherwise it provisions a self-contained PostgreSQL (pgserver, cluster dir
+`pgdata-aknja/` inside the repo, gitignored). CI provisions `postgres:16` as a
+service container and runs the unit/integration job with `-m "not e2e"`.
+
+**E2E (Playwright):** `tests/e2e/` starts a real uvicorn server against a
+scratch database. Without `AKNJA_E2E_DATABASE_URL` it uses a second pgserver
+cluster (`pgdata-aknja-e2e/`); with it set (CI) it runs against that URL
+directly. `AKNJA_E2E=skip` disables the layer. Install browsers once with
+`playwright install chromium`.
+
+**Visual baselines** (`tests/e2e/test_visual.py`) compare full-page PNGs with a
+0.2% pixel tolerance. They are tied to the font stack of the machine that
+generated them, so CI runs only the functional E2E flows; baselines are a
+local gate. If a diff exceeds tolerance: verify it is drift, not a regression
+(`python infra/baseline_verify.py --old <old>.png --new <new>.png`), then
+regenerate with `AKNJA_E2E_UPDATE_BASELINES=1 pytest -q tests/e2e/test_visual.py`.
 
 ## 6. Docker Compose full stack
 

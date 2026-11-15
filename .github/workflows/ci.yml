@@ -35,26 +35,79 @@ jobs:
       SECRET_KEY: ci-secret-key-not-for-production-use-only
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-          cache: pip
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          enable-cache: true
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --all-extras
       - name: Lint (ruff)
-        run: ruff check app tests
+        run: uv run ruff check app tests
       - name: Apply migrations
-        run: alembic upgrade head
-      - name: Run tests
-        run: pytest -q --cov=app --cov-report=term-missing
+        run: uv run alembic upgrade head
+      - name: Run tests (unit/integration)
+        run: uv run pytest -q -m "not e2e"
       - name: Verify install (schema + seeds + taxonomy import)
         run: |
-          python -m app.cli create-super-admin --email ci-founder@example.com --password "CiFounder#1"
-          python -m app.cli seed
-          python -m app.cli import-taxonomy
-          python -m app.cli verify-install
+          uv run python -m app.cli create-super-admin --email ci-founder@example.com --password "CiFounder#1"
+          uv run python -m app.cli seed
+          uv run python -m app.cli import-taxonomy
+          uv run python -m app.cli verify-install
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aknja_test
+          POSTGRES_USER: aknja
+          POSTGRES_PASSWORD: ci-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aknja -d aknja_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://aknja:ci-postgres-password@localhost:5432/aknja_e2e
+      AKNJA_TEST_DATABASE_URL: postgresql+psycopg://aknja:ci-postgres-password@localhost:5432/aknja_test
+      # e2e scratch DB (tests/e2e/conftest.py contract): when set, no pgserver
+      # cluster is started and the flows run against this database.
+      AKNJA_E2E_DATABASE_URL: postgresql+psycopg://aknja:ci-postgres-password@localhost:5432/aknja_e2e
+      APP_ENV: local
+      SECRET_KEY: ci-secret-key-not-for-production-use-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --all-extras
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install chromium for Playwright
+        run: uv run playwright install chromium --with-deps
+      - name: Create e2e scratch database
+        run: |
+          uv run python - <<'PY'
+          import os
+          import psycopg
+          base = os.environ["AKNJA_E2E_DATABASE_URL"].rsplit("/", 1)[0] + "/postgres"
+          with psycopg.connect(base, autocommit=True) as conn:
+              conn.execute("DROP DATABASE IF EXISTS aknja_e2e WITH (FORCE)")
+              conn.execute("CREATE DATABASE aknja_e2e")
+          PY
+      # Visual baselines (tests/e2e/test_visual.py) are intentionally NOT run
+      # here: pixel comparison is tied to the font stack of the machine that
+      # generated the baselines. They run in the local/sandbox gate (docs/16).
+      - name: Run functional E2E flows (real browser)
+        run: uv run pytest -q tests/e2e/test_e2e_flows.py
 
   security:
     runs-on: ubuntu-latest

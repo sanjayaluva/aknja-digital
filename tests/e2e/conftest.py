@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import httpx
 import pgserver
@@ -30,8 +31,14 @@ import pytest
 
 # --- scratch database -----------------------------------------------------------
 
-PGDATA = "/home/z/my-project/pgdata-aknja-e2e"
+# Repo root (this file: <repo>/tests/e2e/conftest.py) — never hardcode machine
+# paths; CI checkouts live elsewhere and the cluster dir is gitignored.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+PGDATA = str(_REPO_ROOT / "pgdata-aknja-e2e")
 DB_NAME = "aknja_e2e"
+# CI / external-database override: when set, no pgserver cluster is started and
+# the suite runs against this URL (service container in CI).
+E2E_DB_URL = os.environ.get("AKNJA_E2E_DATABASE_URL")
 FROZEN_TS = "2026-11-15 12:00:00+00"
 
 E2E_FOUNDER_EMAIL = "founder@example.com"
@@ -44,6 +51,8 @@ PROJECT_NAME = "Sweet Cakes website"
 
 
 def _db_url() -> str:
+    if E2E_DB_URL:
+        return E2E_DB_URL
     uri = pgserver.get_server(PGDATA).get_uri()
     m = re.match(r"postgresql://([^:]*):([^@]*)@/([^?]+)\?host=(.+)", uri)
     assert m, uri
@@ -52,16 +61,22 @@ def _db_url() -> str:
 
 
 def _prepare_database() -> None:
-    """Create the scratch DB once per session: migrate + audit trigger."""
-    uri = pgserver.get_server(PGDATA).get_uri()
-    with psycopg.connect(uri, autocommit=True) as conn:
-        conn.execute(f"DROP DATABASE IF EXISTS {DB_NAME} WITH (FORCE)")
-        conn.execute(f"CREATE DATABASE {DB_NAME}")
+    """Create the scratch DB once per session: migrate + audit trigger.
+
+    pgserver path: drop/create the scratch DB on the bundled cluster.
+    AKNJA_E2E_DATABASE_URL path (CI): the database must already exist
+    (workflow creates it); alembic is idempotent and the seed truncates.
+    """
+    if not E2E_DB_URL:
+        uri = pgserver.get_server(PGDATA).get_uri()
+        with psycopg.connect(uri, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE IF EXISTS {DB_NAME} WITH (FORCE)")
+            conn.execute(f"CREATE DATABASE {DB_NAME}")
     r = subprocess.run(  # noqa: PLW1510 — returncode checked below
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         capture_output=True, text=True, timeout=300,
         env={**os.environ, "DATABASE_URL": _db_url()},
-        cwd="/home/z/my-project/aknja-digital",
+        cwd=str(_REPO_ROOT),
     )
     if r.returncode != 0:
         raise RuntimeError(f"alembic upgrade failed:\n{r.stdout[-1500:]}\n{r.stderr[-1500:]}")
