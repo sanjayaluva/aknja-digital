@@ -46,16 +46,20 @@ def db_session():
 TRANSLATE_LANGUAGES = {"en": "English", "hi": "Hindi", "ml": "Malayalam", "ta": "Tamil"}
 TRANSLATE_MAX_CHARS = 2000
 
-# Instruction pattern mirrors the benchmark translation scenarios (the prompts
-# indictrans2 scores 100% on): keep brand names, output only the translation.
+# Instruction strings mirror the benchmark translation scenarios EXACTLY —
+# the indictrans2 worker (the primary translation lane, 100% benchmark) parses
+# this precise phrasing; free-form instructions get a 400. The worker's
+# contract is en<->{ml,hi,ta} (docs/34 §3), enforced below.
 _TRANSLATE_INSTRUCTIONS = {
-    "ml": "താഴെയുള്ള വാചകം മലയാളത്തിലേക്ക് വിവർത്തനം ചെയ്യുക. ബ്രാൻഡ് പേരുകൾ അതേപടി "
-          "നിലനിർത്തുക. വിവർത്തനം മാത്രം ഔട്ട്പുട്ട് ചെയ്യുക.",
-    "hi": "नीचे दिए गए पाठ का हिंदी में अनुवाद करें। ब्रांड नाम यथावत रखें। केवल अनुवाद दें।",
-    "ta": "கீழே உள்ள உரையை தமிழில் மொழிபெயர்க்கவும். பிராண்ட் பெயர்களை மாற்றாமல் "
-          "வைக்கவும். மொழிபெயர்ப்பை மட்டும் தருக.",
-    "en": "Translate the text below into English. Keep brand names as-is. "
-          "Output only the translation.",
+    "ml": "താഴെയുള്ള ഇംഗ്ലീഷ് വാക്യം മലയാളത്തിലേക്ക് വിവർത്തനം ചെയ്യുക. ബ്രാൻഡ് പേരുകൾ "
+          "(Aknja Digital, WhatsApp) അതേപടി നിലനിർത്തുക. വിവർത്തനം മാത്രം ഔട്ട്പുട്ട് ചെയ്യുക.\n\nവാക്യം: ",
+    "hi": "नीचे दिए गए अंग्रेज़ी वाक्य का हिंदी में अनुवाद करें। ब्रांड नाम (Aknja Digital, "
+          "WhatsApp) यथावत रखें। केवल अनुवाद दें।\n\nवाक्य: ",
+    "ta": "கீழே உள்ள ஆங்கில வாக்கியத்தை தமிழில் மொழிபெயர்க்கவும். பிராண்ட் பெயர்களை "
+          "(Aknja Digital, WhatsApp) மாற்றாமல் வைக்கவும். மொழிபெயர்ப்பை மட்டும் தருக.\n\nவாக்கியம்: ",
+    "en": "Translate the Malayalam sentence into professional English. Render brand "
+          "names in Latin script exactly (Aknja Digital, WhatsApp). Output only the "
+          "translation.\n\nSentence: ",
 }
 
 # Defense-in-depth: obvious credential shapes never leave for a third-party
@@ -133,6 +137,9 @@ def portal_translate_submit(
             error = "Unsupported language."
         elif source == target:
             error = "Source and target language must differ."
+        elif (source != "en") == (target != "en"):
+            # indictrans2 worker contract: en<->{ml,hi,ta} only (docs/34 §3)
+            error = "Supported pairs: English ↔ Malayalam / Hindi / Tamil."
         elif not (text := text.strip()):
             error = "Enter some text to translate."
         elif len(text) > TRANSLATE_MAX_CHARS:
@@ -147,7 +154,7 @@ def portal_translate_submit(
         if error is None:
             from app.modules.ai.gateway import ToolGateway
 
-            prompt = f"{_TRANSLATE_INSTRUCTIONS[target]}\n\nText: {text}"
+            prompt = f"{_TRANSLATE_INSTRUCTIONS[target]}{text}"
             gateway = ToolGateway(db)
             execution = gateway.execute_tool(
                 principal=principal,

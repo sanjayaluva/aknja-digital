@@ -159,3 +159,13 @@ def test_admin_cannot_use_portal_translate(db, app, seed, monkeypatch) -> None:
     _setup_portal(db, app, seed, monkeypatch)
     admin = AuthClient(app, ADMIN_EMAIL, ADMIN_PASSWORD)
     assert admin.get("/portal/translate").status_code == 403
+
+
+def test_portal_translate_rejects_non_english_pairs(db, app, seed, monkeypatch) -> None:
+    """The indictrans2 worker contract is en<->{ml,hi,ta}: ml->hi must be
+    rejected at the form, not surface as a worker 400 (live 2026-11-15)."""
+    portal = _setup_portal(db, app, seed, monkeypatch)
+    resp = portal.post("/portal/translate", data={
+        "source": "ml", "target": "hi", "text": "സന്ദേശം", "csrf_token": portal.csrf,
+    })
+    assert "Supported pairs" in resp.text
