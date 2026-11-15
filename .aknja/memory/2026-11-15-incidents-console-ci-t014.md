@@ -44,3 +44,22 @@ failure with the fix queued in this commit.
   dialect marker, not a scheme.
 - CI runners are ~2-core: first-request budgets need warm-ups or generous
   timeouts; later identical tests passing is the cold-start signature.
+
+## Addendum — first all-green pipeline (c84bf15, run 43694546044)
+
+The e2e CI loop took three iterations to close:
+1. bd723b9 fixed gitleaks + psycopg scheme → test + security green, e2e
+   10/11 (first-login cold start >10s on the 2-core runner).
+2. 8f7d14f added warm-up + 30s + login retry → the retry INTRODUCED a
+   failure: when attempt-1's login XHR completed late, its Set-Cookie made
+   attempt-2's goto('/login') redirect to /admin (authenticated users are
+   302'd away from /login), and page.fill timed out on the admin page.
+3. c84bf15 hardened login() with an already-logged-in guard before every
+   attempt ('/login' not in page.url after goto = success), up to 3
+   attempts, real auth errors (#login-error visible) never retried.
+
+Result: test + e2e + security ALL GREEN — first fully green pipeline in
+repo history. The runner stall itself (one request >30s, self-healing,
+never reproducible locally — 88/88 logins across 8 local runs) remains an
+environment property; the harness now tolerates it and dumps page content
+if it ever exhausts retries.

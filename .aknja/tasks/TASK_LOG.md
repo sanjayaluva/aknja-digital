@@ -319,7 +319,12 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   10/11 with the sole failure the first-login cold start on the 2-core
   runner (TimeoutError >10s) — fixed by warm-up + 30s; run 9a82b3a: test
   SUCCESS (clean-runner manifest fix proven), security/e2e failures
-  root-caused from logs and fixed in bd723b9
+  root-caused from logs and fixed in bd723b9. Two more runner-stall
+  iterations (8f7d14f retry; c84bf15 already-logged-in guard — the retry
+  itself induced a failure because /login 302s authenticated users, so a
+  late-completing first attempt made attempt-2 land on /admin) produced
+  the FIRST ALL-GREEN PIPELINE at run 43694546044 (c84bf15): test + e2e
+  + security all success
 - failure_reason: —
 
 ## Open items (next rounds)
