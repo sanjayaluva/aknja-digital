@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -117,6 +117,12 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["health"], include_in_schema=False)
     def healthz() -> dict[str, str]:
         return {"status": "ok", "version": __version__, "env": settings.app_env}
+
+    @app.head("/healthz", tags=["health"], include_in_schema=False)
+    def healthz_head() -> Response:
+        # External uptime monitors (UptimeRobot et al.) probe with HEAD;
+        # a 405 here reads as "site down" (observed live 2026-11-15, T-024).
+        return Response(status_code=200)
 
     # --- API v1 routers ---
     from app.api.v1 import ai, auth, catalog, commercial, crm, delivery, governance, resources
