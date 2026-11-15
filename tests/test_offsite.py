@@ -20,6 +20,7 @@ from app.core.config import Settings
 from app.core.errors import ConflictError
 from app.modules.ops.backup import create_backup
 from app.modules.ops.offsite import (
+    list_objects,
     offsite_key_for,
     pull_backup_offsite,
     push_backup_offsite,
@@ -34,6 +35,13 @@ GOLDEN_AUTH = (
     "Signature=d4892b378a7eb58f94cc18a09fff37895ba55932fa4763eaa0149c17d3228e72"
 )
 
+GOLDEN_AUTH_QUERY = (
+    "AWS4-HMAC-SHA256 "
+    "Credential=AKIAIOSFODNN7EXAMPLE/20261115/auto/s3/aws4_request, "
+    "SignedHeaders=host;x-amz-content-sha256;x-amz-date, "
+    "Signature=1192ba963fe4abfc025fe48c94a2694007e48bcae3ec53731f2acda596e5ea7b"
+)
+
 
 def _settings(tmp_path, **overrides) -> Settings:
     base = {
@@ -46,6 +54,48 @@ def _settings(tmp_path, **overrides) -> Settings:
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)
+
+
+def test_sigv4_query_string_is_signed_and_order_insensitive() -> None:
+    """ListObjectsV2-style requests: the query string is part of the canonical
+    request (the pre-T-024 empty-string bug produced 403 SignatureDoesNotMatch)."""
+    kw = dict(
+        method="GET", payload=b"", key_id="AKIAIOSFODNN7EXAMPLE",
+        secret="wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+        amz_date="20261115T120000Z", region="auto",
+    )
+    canonical_order = sign_v4(url="https://s3.example.internal/bucket?list-type=2&prefix=backups%2F", **kw)
+    assert canonical_order["Authorization"] == GOLDEN_AUTH_QUERY
+    # a different parameter order yields the SAME signature (sorted canonical)
+    shuffled = sign_v4(url="https://s3.example.internal/bucket?prefix=backups%2F&list-type=2", **kw)
+    assert shuffled["Authorization"] == GOLDEN_AUTH_QUERY
+    # and the query clearly changes the signature vs the bare bucket URL
+    bare = sign_v4(url="https://s3.example.internal/bucket", **kw)
+    assert bare["Authorization"] != GOLDEN_AUTH_QUERY
+
+
+def test_list_objects_parses_keys(tmp_path) -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers.get("Authorization", "")
+        return httpx.Response(200, text=(
+            '<?xml version="1.0"?>'
+            "<ListBucketResult>"
+            "<Name>aknja-test</Name>"
+            "<Contents><Key>backups/a.dump</Key></Contents>"
+            "<Contents><Key>backups/a.dump.manifest.json</Key></Contents>"
+            "</ListBucketResult>"
+        ))
+
+    keys = list_objects(
+        "backups/", settings=_settings(tmp_path),
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    assert keys == ["backups/a.dump", "backups/a.dump.manifest.json"]
+    assert "list-type=2" in seen["url"] and "prefix=backups%2F" in seen["url"]
+    assert seen["auth"].startswith("AWS4-HMAC-SHA256")
 
 
 def test_sigv4_golden_and_structure() -> None:

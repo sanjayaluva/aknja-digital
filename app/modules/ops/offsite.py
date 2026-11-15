@@ -17,6 +17,7 @@ import hmac
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import quote, unquote
 
 import httpx
 
@@ -59,6 +60,22 @@ def sign_v4(
     datestamp = (amz_date or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
     short_date = datestamp[:8]
     payload_hash = hashlib.sha256(payload).hexdigest()
+    # Canonical query string (SigV4): RFC3986-encoded k=v pairs, sorted —
+    # the empty string before this fix silently broke every request with a
+    # query (e.g. ListObjectsV2) with 403 SignatureDoesNotMatch.
+    if parsed.query:
+        raw_query = parsed.query.decode() if isinstance(parsed.query, bytes) else parsed.query
+        # Parts arrive URI-encoded; decode, then re-encode canonically so an
+        # already-encoded value is not double-encoded.
+        pairs = sorted(
+            (unquote(k), unquote(v))
+            for k, _, v in (part.partition("=") for part in raw_query.split("&"))
+        )
+        canonical_query = "&".join(
+            f"{quote(k, safe='-_.~')}={quote(v, safe='-_.~')}" for k, v in pairs
+        )
+    else:
+        canonical_query = ""
     headers = {
         "host": host,
         "x-amz-content-sha256": payload_hash,
@@ -67,7 +84,8 @@ def sign_v4(
     signed_headers = ";".join(sorted(headers))
     canonical_headers = "".join(f"{k}:{headers[k]}\n" for k in sorted(headers))
     canonical_request = (
-        f"{method}\n{parsed.path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+        f"{method}\n{parsed.path}\n{canonical_query}\n{canonical_headers}\n"
+        f"{signed_headers}\n{payload_hash}"
     )
     scope = f"{short_date}/{region}/{service}/aws4_request"
     string_to_sign = (
@@ -178,6 +196,38 @@ def download_object(
 
 
 # --------------------------------------------------------- push / drill ops
+
+def list_objects(
+    prefix: str = "",
+    *,
+    settings: Settings | None = None,
+    http_client: httpx.Client | None = None,
+) -> list[str]:
+    """List object keys in the offsite bucket (ListObjectsV2, one page).
+
+    Used by maintenance/migration tooling; the app's push/pull paths know
+    their keys ahead of time and never list.
+    """
+    target = offsite_target(settings)
+    if target is None:
+        raise ConflictError("offsite storage not configured")
+    endpoint, bucket, key_id, secret = target
+    url = f"{endpoint}/{bucket}?list-type=2&prefix={quote(prefix, safe='')}"
+    headers = sign_v4(method="GET", url=url, payload=b"", key_id=key_id, secret=secret)
+    client = http_client or httpx.Client(timeout=120)
+    try:
+        response = client.get(url, headers=headers)
+        if response.status_code != 200:
+            raise ConflictError(
+                f"offsite list failed: HTTP {response.status_code}: {response.text[:300]}"
+            )
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(response.text)
+        return [el.text for el in root.findall(".//{*}Key") if el.text]
+    finally:
+        if http_client is None:
+            client.close()
 
 
 def push_backup_offsite(
