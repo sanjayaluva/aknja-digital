@@ -27,6 +27,10 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql+psycopg://aknja:ci-postgres-password@localhost:5432/aknja_test
+      # tests/conftest.py reads AKNJA_TEST_DATABASE_URL (not DATABASE_URL) to
+      # decide between the pgserver sandbox path and an external database;
+      # without this the suite tries `import pgserver` and errors out.
+      AKNJA_TEST_DATABASE_URL: postgresql+psycopg://aknja:ci-postgres-password@localhost:5432/aknja_test
       APP_ENV: local
       SECRET_KEY: ci-secret-key-not-for-production-use-only
     steps:

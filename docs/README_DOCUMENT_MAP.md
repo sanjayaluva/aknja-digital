@@ -10,3 +10,5 @@
 - `16`–`23`: QA, CI, staging, production, operations, maintenance, DR and security.
 - `24`–`39`: commercial, marketing, integrations, SRE, legal, operations and support.
 - `40`: first development start checklist.
+- `41`: local development and test runbook (fresh-environment reproduction).
+- `42`: dependency audit (T-011) — findings, resolutions, follow-ups; tool `infra/dependency_audit.py`.

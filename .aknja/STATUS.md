@@ -1,6 +1,6 @@
 # Implementation Status — Core Platform Implemented (v0.1.0)
 
-**Last updated:** 14 November 2026 · see `docs/41_LOCAL_DEVELOPMENT_AND_TEST_RUNBOOK.md` for reproduction steps.
+**Last updated:** 15 November 2026 · see `docs/41_LOCAL_DEVELOPMENT_AND_TEST_RUNBOOK.md` for reproduction steps and `docs/42_DEPENDENCY_AUDIT.md` for dependency integrity.
 
 Evidence rule (unchanged): a status changes only with tests, commands and their output — never intention or a container start.
 
@@ -26,6 +26,7 @@ Evidence rule (unchanged): a status changes only with tests, commands and their 
 | QA/visual verification | DONE | 160 tests passing in one command (unit/integration/contract + 11 Playwright E2E flows + 8 visual baselines with 0.2% pixel-diff tolerance) against real PostgreSQL 16; E2E layer found and fixed six ship-blocking UI bugs (login form serialization, 422→500 handler crash, principal/CSRF wiring, audit NULL-tenant visibility, logout redirect, unstable row ordering) |
 | Client portal UAT workflow | IMPLEMENTED + TESTED | Portal tests in `tests/test_ui.py`, `tests/test_auth_rbac.py` |
 | Production incident automation | SPECIFIED | Incident/support models + UI-ready; automation deferred (docs/20) |
+| Dependency integrity | IMPLEMENTED + TESTED | T-011 (docs/42): complete manifest (4 runtime + 4 test deps were undeclared and broke clean installs), CI contract fix (`AKNJA_TEST_DATABASE_URL`), explicit setuptools package discovery, pytest 9 / Pillow 13 CVE upgrades; audit tool `infra/dependency_audit.py` — 81 installed / 0 CVE / 0 unused / 0 undeclared / 0 unresolved |
 
 **Test suite:** 160 tests, all passing (`pytest -q`), including concurrency tests against real PostgreSQL, 11 real-browser Playwright E2E flows and 8 visual-baseline comparisons (skips cleanly without Chromium; `AKNJA_E2E=skip` to disable). Lint: `ruff check app tests` clean.
 

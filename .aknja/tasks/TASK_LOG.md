@@ -202,6 +202,37 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   ("no verified backup would remain") -> maintenance on/status/off cycle
 - failure_reason: —
 
+## T-011 — Dependency audit + manifest/CIF fixes (this round)
+
+- goal: restore the workspace after a sandbox recycle and audit dependencies
+  (original task-list item); deliver a dependency-integrity state where a clean
+  `pip install -e ".[dev]"` boots the app, the suite is green on a fresh
+  environment, and the audit reports zero findings.
+- inputs: recovery report 2026-11-15 (sandbox recycle, private remote, no local
+  copy), repo @ 455054e re-cloned after the owner set it public, audit tooling
+  developed and fixture-tested during the blocked period
+  (`infra/dependency_audit.py`), docs/33 zero-cost invariant, docs/41 runbook
+- acceptance_criteria: fresh-venv editable install succeeds; app boots; pytest
+  160/160 incl. e2e; ruff clean; audit inventory with direct/transitive +
+  license classification; CVE scan via pip-audit same-environment; findings
+  either resolved or documented with follow-ups.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `infra/dependency_audit.py` (inventory/import cross-check/pip-audit
+  CVE scan, same-env invariant, PEP 503 normalization, lazy-import allowlist),
+  `docs/42_DEPENDENCY_AUDIT.md` (findings + resolutions + follow-ups),
+  pyproject.toml (explicit package discovery; +argon2-cffi/jinja2/
+  email-validator/python-multipart runtime; +pgserver/playwright/Pillow/
+  pip-audit dev; pytest>=9.0.3; Pillow>=13), ci.yml (AKNJA_TEST_DATABASE_URL),
+  regenerated `tests/e2e/baselines/admin-providers.png`
+- verification_evidence: clean venv `pip install -e ".[dev]"` + app import OK;
+  ruff clean; pytest 160 passed (Pillow 13, chromium 159, regenerated baseline);
+  audit final: 81 installed / 0 CVE / 0 unused / 0 undeclared / 0 unresolved,
+  exit 0; fixed-in-audit-bugs: pip-audit JSON schema (vulns field), cross-venv
+  pip-audit resolution, name normalization, CVE dedup; baseline drift verified
+  structural (37 text-line bands 8–13px, canvas identical 1280×3152)
+- failure_reason: —
+
 ## Open items (next rounds)
 
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)
