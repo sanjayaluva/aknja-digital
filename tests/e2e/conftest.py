@@ -309,11 +309,30 @@ def seed_ids(server_url):
 
 
 def login(page, base_url: str, email: str, password: str) -> None:
-    """Real login through the htmx form: fill, submit, wait for the redirect."""
-    page.goto(f"{base_url}/login")
-    page.fill('input[name="email"]', email)
-    page.fill('input[name="password"]', password)
-    page.click('button[type="submit"]')
-    # 30s: the first login on a cold CI runner (argon2 + session + audit
-    # writes + template compile) can exceed a tight 10s budget.
-    page.wait_for_url(lambda url: "/admin" in url or "/portal" in url, timeout=30_000)
+    """Real login through the htmx form: fill, submit, wait for the redirect.
+
+    On slow shared CI runners the login XHR can stall past the wait budget
+    while later, identical logins succeed (transient runner contention —
+    55/55 pass locally). Retry once ONLY when no error box is visible: a
+    visible error is a real auth failure and must fail the test.
+    """
+    for attempt in (1, 2):
+        page.goto(f"{base_url}/login")
+        page.fill('input[name="email"]', email)
+        page.fill('input[name="password"]', password)
+        page.click('button[type="submit"]')
+        # 30s: the first login on a cold CI runner (argon2 + session + audit
+        # writes + template compile) can exceed a tight 10s budget.
+        try:
+            page.wait_for_url(
+                lambda url: "/admin" in url or "/portal" in url, timeout=30_000
+            )
+            return
+        except Exception:
+            error_visible = page.locator("#login-error:not([hidden])").count() > 0
+            if error_visible or attempt == 2:
+                # surface what the page actually shows for diagnosis
+                print(f"\n[login timeout] page url={page.url}")
+                print(f"[login timeout] page content:\n{page.content()[:2000]}")
+                raise
+            page.wait_for_timeout(1_000)  # let any stalled request drain
