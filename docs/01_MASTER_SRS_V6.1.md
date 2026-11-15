@@ -734,3 +734,7 @@ These are candidates for evaluation, not guaranteed simultaneously available fre
 8. External provider use must follow verified plan/terms, privacy, quota and quality eligibility.
 9. Production idle reclamation and PAYG behavior must be confirmed with Oracle for the exact tenancy; do not assume PAYG alone guarantees Always Free 24×7 retention.
 10. RPO/RTO, retention periods, service SLAs and hosting capacity remain business decisions to be approved after measurement; do not invent guarantees.
+
+> NOTE (T-024, 2026-11-15): the object-storage bucket named in this SRS
+> as `aknja-digital-artifacts` was renamed to `aknja-artifacts`; the
+> semantics are unchanged.

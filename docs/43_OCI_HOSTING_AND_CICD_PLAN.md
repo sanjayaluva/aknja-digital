@@ -144,3 +144,7 @@ increment; `infra/oci/` + the phased script are the reproducible base.
 - DR evidence: prod offsite restore drill PASSED (counts/schema/
   audit_chain, isolated scratch DB; `aknja` role granted CREATEDB for
   drills) + instance-2 cross-host R2 pull with sha256 match.
+
+> NOTE (T-024, 2026-11-15): the offsite bucket is now `aknja-artifacts`
+> (created/adopted, backups migrated, old `aknja-digital-artifacts`
+> emptied and deleted). Both instance .envs updated.

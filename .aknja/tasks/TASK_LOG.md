@@ -573,18 +573,56 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   broke on unquoted spaces → false "invalid key" during gemini debugging.
 - status: COMPLETED — translation live via self-hosted free path.
 
+## T-024 — Ops round: uptime fix, real allowances, bucket rename, audit-chain repair (this round)
+
+- founder replies honored: (2) UptimeRobot done — verified probing but our
+  GET-only /healthz answered 405 to their HEAD probes (monitor read DOWN);
+  HEAD route added (57281f6), public HEAD → 200, monitor green.
+  (3) console numbers NOT needed — real limits read from live APIs:
+  groq 1000 rpm/8000 tpm headers; openrouter /api/v1/key free-tier
+  confirmation (50/day documented stands). (4) bucket renamed to
+  aknja-artifacts (already existed, owned by us), both .envs switched,
+  fresh backup pushed + drill PASSED, old aknja-digital-artifacts
+  emptied and deleted.
+- sandbox recycle recovery: SSH key re-extracted from the credentials
+  file (upload/ restored), instance .envs pulled back, repo reset to
+  origin/main. t023 scratch scripts lost (logic lives in the app repo).
+- sign_v4 canonical query-string fix + list_objects (268f5a0): every
+  S3 request WITH a query previously failed 403 SignatureDoesNotMatch
+  (found live during the migration); golden pin + order-insensitivity
+  + parsing tests.
+- AUDIT-CHAIN INCIDENT (found by the restore drill): record_audit read
+  the chain tail without a lock — the parallel benchmark runs of T-023
+  forked the hash chain (breaks at ids 37/40); every later drill failed
+  (counts=ok schema=ok audit_chain=BROKEN). Fix: pg_advisory_xact_lock
+  in record_audit (993074f) + 4-thread concurrency test. Prod repair:
+  deterministic full-pass relink (18 rows) through the documented
+  aknja.audit_admin escape hatch, surgery recorded as an audit event,
+  fresh backup → push → offsite-drill PASSED.
+- gemini comparison: direct API region-blocked (product disabled,
+  T-023g); openrouter free pool currently has NO gemini :free (14 free
+  models, closest Google = gemma-4-26b/31b-it:free); the gemma-4-31b
+  translation probe hit the exhausted :free daily budget (8×429).
+  Deferred with the evidence recorded (docs/33).
+- status: COMPLETED — translation live (indictrans2 8/8), monitors
+  green, bucket consolidated, chain healthy, allowances evidence-based.
+
 ## Open items (next rounds)
 
-- Founder console confirmations: groq current free-tier numbers
-  (allowance recorded conservatively at 1000/day); gemini re-verification
-  from an allowed region (generateContent region-blocked from sandbox+OCI,
-  product disabled with audit — T-023g) or drop gemini from the pool
+- Gemini resolution (founder): test the API key from a home/allowed
+  network (curl one-liner in docs/33); if it works there, decide — a
+  Google account whose home country is supported, or drop gemini
+  (translation is fully served by indictrans2; gemma-4 :free probes
+  can substitute for Google-quality comparisons once the daily budget
+  resets)
 - openrouter re-benchmark after a :free model change (currently gated
   for translation/code_review/proposal_draft by honest evidence); groq
   full benchmark (unbenmarked = eligible for all tasks today)
-- external uptime monitor on https://aknja.pp.ua/healthz (UptimeRobot
-  candidate, docs/34) — needs founder account signup
-- optional: create the `agency-artifacts` R2 bucket (admin rights
-  confirmed T-021; app stays on aknja-digital-artifacts by default)
+- DONE T-024: UptimeRobot live — founder account connected, probing
+  https://aknja.pp.ua/healthz (~5 min, multi-IP); our GET-only route
+  answered 405 to their HEAD probes, fixed with an explicit HEAD route
+  (57281f6), monitor green since
+- DONE T-024: bucket renamed aknja-artifacts; old bucket deleted
+  (retired the old agency-artifacts/aknja-digital-artifacts naming)
 - client-facing translation feature (service catalog item) built on the
   now-proven task=translation path (indictrans2 + fallback pool)

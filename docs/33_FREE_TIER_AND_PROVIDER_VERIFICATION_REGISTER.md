@@ -36,3 +36,21 @@ No external provider should be enabled until evidence is recorded. A provider ca
   (self-imposed rate protection) — worker on instance-2, reached via
   reverse SSH tunnel. Live ping 3838 ms; PROD translation benchmark
   (record d665d003): 100% PASS (8/8, floor 1.0) — translation UNGATED.
+
+## Real-allowance round + uptime + bucket — 2026-11-15 (T-024)
+
+- groq: REAL limits read from live response headers (T-024a):
+  1000 requests/min + 8000 tokens/min on openai/gpt-oss-20b; registry
+  allowance stays conservative 1000/day (evidence in the audit ledger).
+- openrouter: /api/v1/key confirms is_free_tier=true, usage 0; provider
+  exposes no programmatic daily cap; documented 50/day stands (the pool
+  exhausted it 2026-11-15 after the 44 benchmark calls — every further
+  :free call 429s until the daily reset).
+- gemini: still DISABLED (region). Gemini-free comparison attempted via
+  openrouter: no gemini :free model in the current 14-model free pool;
+  closest Google models are google/gemma-4-26b/31b-it:free — the 31b
+  translation probe hit the exhausted :free budget (8/8 HTTP 429).
+  Retry after the UTC daily reset or when a gemini :free appears.
+- uptime: founder signed up UptimeRobot (probing ~5 min, multi-IP);
+  our GET-only /healthz answered 405 to their HEAD probes (read as
+  DOWN) — fixed with an explicit HEAD route (57281f6), monitor now green.
