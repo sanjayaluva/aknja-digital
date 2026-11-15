@@ -483,6 +483,10 @@ def run_benchmark(
         outcome = llm_complete(
             db, tenant_id=tenant_id, task=s.task, prompt=s.prompt,
             target_provider=provider, http_client=http_client, settings=cfg,
+            # The gate is fed by this very measurement — a gated provider
+            # must still be re-measurable (else a single bad row locks
+            # forever with self-referential 0% evidence; live 2026-11-15).
+            bypass_quality_gate=True,
         )
         if outcome.status != "SUCCEEDED":
             results.append({

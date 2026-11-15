@@ -61,6 +61,7 @@
     <nav>
       <div class="nav-group">Workspace</div>
       <a href="/portal" class="{{ 'active' if request.url.path == '/portal' else '' }}">My Projects</a>
+      <a href="/portal/translate" class="{{ 'active' if '/translate' in request.url.path else '' }}">Translate</a>
       <a href="/portal/invoices" class="{{ 'active' if '/invoices' in request.url.path else '' }}">Invoices</a>
     </nav>
     <div class="sidebar-footer">

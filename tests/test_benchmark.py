@@ -345,6 +345,54 @@ def test_run_benchmark_requires_registered_provider(db, seed) -> None:
                       http_client=_good_client(), settings=_settings(ai_provider_enabled=True))
 
 
+def test_benchmark_reattempts_gated_provider(db, seed) -> None:
+    """The gate must never block its own re-measurement (§6).
+
+    Regression (live 2026-11-15): a gated provider's re-run recorded 0%
+    built entirely from gate-blocked scenarios — self-referential evidence
+    that locked the gate forever. A re-run with a healthy provider must
+    actually measure and can lift the gate.
+    """
+    _setup_provider(db, seed)
+    # 1. a bad run installs the gate
+    card_bad = run_benchmark(
+        db, tenant_id=seed.tenant.id, provider=PROVIDER,
+        http_client=_bad_client(), settings=_settings(ai_provider_enabled=True),
+    )
+    db.commit()
+    assert card_bad["passed"] is False
+
+    # 2. production traffic on the failed task is gate-blocked
+    blocked = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(ai_provider_enabled=True), http_client=_good_client(),
+    )
+    assert blocked.status == "PENDING_MANUAL"
+    assert any("quality floor" in a["reason"] for a in blocked.attempts)
+
+    # 3. the benchmark re-run must measure the provider, not the gate
+    card_good = run_benchmark(
+        db, tenant_id=seed.tenant.id, provider=PROVIDER,
+        http_client=_good_client(), settings=_settings(ai_provider_enabled=True),
+    )
+    db.commit()
+    assert card_good["passed"] is True
+    assert all(v["score"] == 1.0 for v in card_good["per_task"].values())
+    # no gate-blocked scenario may fake a quality verdict
+    row_good = db.get(ProviderQualityBenchmark, card_good["record_id"])
+    assert all(
+        "quality floor" not in (r.get("failed_checks") or [""])[0]
+        for r in row_good.score_json["scenario_results"]
+    )
+
+    # 4. the passing re-run lifts the gate for production traffic
+    unblocked = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(ai_provider_enabled=True), http_client=_good_client(),
+    )
+    assert unblocked.status == "SUCCEEDED"
+
+
 # --- §6 inference gate -----------------------------------------------------------
 
 

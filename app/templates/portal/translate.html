@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Translate — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div>
+      <h1>Translate</h1>
+      <p class="muted">English ↔ Malayalam / Hindi / Tamil, powered by our free self-hosted engine.
+        {{ used_today }}/{{ daily_limit }} requests used today.</p>
+    </div>
+  </header>
+
+  {% if error %}<div class="alert alert-err">{{ error }}</div>{% endif %}
+
+  <section class="card">
+    <form method="post" action="/portal/translate" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="pill-row">
+        <label>From
+          <select name="source">
+            {% for code, name in langs.items() %}
+            <option value="{{ code }}" {{ 'selected' if form.source == code else '' }}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>To
+          <select name="target">
+            {% for code, name in langs.items() %}
+            <option value="{{ code }}" {{ 'selected' if form.target == code else '' }}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <label>Text to translate (max 2000 characters)
+        <textarea name="text" rows="5" required
+                  placeholder="Paste your text here — do not paste passwords or API keys.">{{ form.text }}</textarea>
+      </label>
+      <button type="submit">Translate</button>
+    </form>
+  </section>
+
+  {% if result %}
+  <section class="card">
+    <h2>Translation</h2>
+    <p class="translation-output" style="white-space: pre-wrap; font-size: 1.05rem;">{{ result.text }}</p>
+    <p class="muted">Engine: {{ result.provider }} / {{ result.model }} · {{ result.latency_ms }} ms</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

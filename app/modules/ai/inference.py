@@ -382,12 +382,19 @@ def llm_complete(
     max_attempts: int = 3,
     http_client: httpx.Client | None = None,
     settings: Settings | None = None,
+    bypass_quality_gate: bool = False,
 ) -> LLMResult:
     """Run one LLM task through the free-provider pool with failover.
 
     Fail-closed guarantees (v5.3.2 §5C): if no eligible free provider
     exists the result is PENDING_MANUAL with a reason — the caller queues
     or escalates; client deliverables are never silently degraded.
+
+    bypass_quality_gate is for the benchmark runner only (§6): the quality
+    gate is fed BY benchmarks, so it must never block the re-measurement
+    itself — observed live 2026-11-15, a re-run against a gated provider
+    recorded a 0% row built entirely from gate-blocked scenarios, locking
+    the gate with self-referential evidence.
     """
     if task not in TASK_PROFILES:
         raise ValueError(f"unknown task '{task}' (expected one of {sorted(TASK_PROFILES)})")
@@ -451,7 +458,9 @@ def llm_complete(
             account = db.get(ProviderAccount, product.account_id)
             # v5.3.2 §6 quality floor: a provider whose latest fresh benchmark
             # failed this task is not eligible for it — skip and fail over.
-            gate_reason = benchmark_gate(db, product.id, task)
+            # (Skipped entirely for benchmark runs: the gate's own evidence
+            # source must be able to re-measure a gated provider.)
+            gate_reason = None if bypass_quality_gate else benchmark_gate(db, product.id, task)
             if gate_reason:
                 reason = f"{account.provider}: {gate_reason}"
                 result.attempts.append(
