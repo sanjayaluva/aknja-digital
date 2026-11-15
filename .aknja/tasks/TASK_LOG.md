@@ -449,11 +449,47 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   stays open; Modal is the verified alternative (web deployment of the
   FastAPI app + bundled PostgreSQL per docs/19 admission checklist).
 
+## T-020 — Free-tier sweep after Mistral retirement + OCI deployment plan (this round)
+
+- goal: respond to the founder's 2026-11-15 decisions (drop Mistral, drop
+  Modal, OCI chosen, default R2 bucket) with a verified free-tier catalog
+  and a deployment plan; answer the Malayalam-translation free-resource
+  question.
+- method: web sweep (sources recorded in docs/34 §3) + workspace audit for
+  the OCI credentials.
+- decisions:
+  - Mistral withdrawn (provider removed the La Plateforme free tier).
+  - Modal withdrawn from hosting (paid; one-time credits only).
+  - OCI chosen: 2 x A1-class instances (1 OCPU/6 GB/50 GB) — docs/43.
+  - Deploy path: GitHub Actions CI/CD over SSH (repo is public → standard
+    runners free); direct SSH stays ops-only. docs/43.
+  - R2: default bucket `aknja-digital-artifacts` stays; new-bucket creation
+    documented (dashboard or Admin Read & Write token).
+  - Malayalam translation: primary = self-hosted IndicTrans2
+    en-indic-dist-200M (MIT, ~1.1 GB, en->ml) on instance 2; Gemini free
+    tier for LLM-quality translation; Bhashini/Sarvam/Google Cloud
+    Translation as benchmark/paid-adjacent candidates; NLLB-200 EXCLUDED
+    (CC-BY-NC); bodhan-ai/indic-translate EXCLUDED (24 GB GPU + hosting
+    sign-off clause); HF serverless inference no longer a free production
+    path (credits).
+- findings: the OCI username/IP/private key shared earlier did NOT reach the
+  workspace (absent from .env, upload/, git history) — re-share requested;
+  safe path: paste in chat or upload/oci_key.pem (*.pem gitignored).
+- deliverables: docs/34 §3 (2026-11-15 watchlist + exclusions/withdrawals),
+  docs/33 compute-list updates, docs/43 (OCI hosting + CI/CD plan),
+  STATUS.md updates.
+- status: COMPLETED (research + plan) / OCI EXECUTION BLOCKED on credential
+  re-share.
+
 ## Open items (next rounds)
 
-- Founder console confirmations: mistral plan chat quota (limit=0), gemini/
-  groq current free-tier numbers (allowances recorded conservatively)
-- Staging deployment decision: Modal (token verified) vs OCI (no
-  credentials in sheet) — needs founder go per docs/19/docs/38
-- openrouter translation re-run (needs a stronger :free model or the ml
-  translation floor evidence) — provider currently gated for translation
+- Founder console confirmations: gemini/groq current free-tier numbers
+  (allowances recorded conservatively) — [mistral item CLOSED 2026-11-15:
+  provider retired the free tier]
+- OCI deployment per docs/43: BLOCKED on founder re-sharing instance access
+  (username, 2 x public IP, SSH private key — safe paths: chat or
+  upload/oci_key.pem, *.pem is gitignored); then: first-login arch check,
+  security-list ports 22/80/443, secrets to GitHub, CI/CD deploy workflow
+- openrouter translation re-run with the chosen free path: self-hosted
+  IndicTrans2-dist-200M benchmark on the ml floor, Gemini-free comparison,
+  then ungate translation — currently gated for translation

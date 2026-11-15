@@ -50,6 +50,43 @@ This register extends the doc-sourced pool (`docs/33`, `docs/source_provider_poo
 - **Any paid tier of anything** — zero-cost mode (v5.3.1) blocks paid
   selection without an explicit founder override.
 
+3. **Web-researched watchlist (researched 2026-11-15 — after the Mistral
+   free-tier retirement)** — same rules: point-in-time observations with
+   source URLs; re-verify in the account console before activation.
+
+| Service | Category | Observed free tier (2026-11-15) | Source | Fit |
+|---|---|---|---|---|
+| Groq free tier | AI/LLM | per-model RPM/RPD/TPM/TPD quotas, no card | https://console.groq.com/docs/rate-limits | stays in the Layer-1 pool; key valid, region-blocked from dev sandbox only |
+| Cerebras Developer tier | AI/LLM | per-model RPM/TPM quotas, no card | https://inference-docs.cerebras.ai/support/rate-limits | stays in the Layer-1 pool; key valid, region-blocked from dev sandbox only |
+| Gemini API free tier (AI Studio) | AI/LLM | per-model RPD limits (tightened 2026-02) | https://aistudio.google.com/docs/rate-limits | strongest free Malayalam-capable LLM; key valid, region-blocked from dev sandbox only |
+| AI4Bharat IndicTrans2 en-indic-dist-200M | translation (self-host) | MIT license, ~0.3B params, ~1.1 GB F32 weights, en→ml supported; gated download (HF account + accept terms) | https://huggingface.co/ai4bharat/indictrans2-en-indic-dist-200M | PRIMARY free translation path: self-host on the 2nd OCI A1 instance; commercial use allowed; CPU inference feasible for batch/UI strings |
+| Bhashini (NLTM) | translation | free APIs covering the 22 scheduled languages incl. Malayalam; organization registration required; developer-tier usage is PoC-only | https://bhashini.gov.in + https://dibd-bhashini.gitbook.io/bhashini-apis | government translation path; production use likely needs Sahyogi partnership — benchmark/fallback only |
+| Sarvam Translate | translation | ₹100 one-time signup credits (~50K chars at ₹20/10K chars); state-of-the-art Indian-language quality | https://www.sarvam.ai/api-pricing | trial credits are one-time, never perpetual free (same rule as Modal) — benchmark only |
+| Google Cloud Translation | translation | 500,000 chars/month free (applied as a $10 monthly credit); commercial use allowed | https://cloud.google.com/products/translate/pricing | requires a GCP billing account (card on file) — conflicts with the zero-cost guard unless the founder explicitly accepts that condition |
+| MyMemory | translation | ~5,000 chars/day anonymous; higher with a registered email | https://mymemory.translated.net/doc/spec.php | low-cost TM-based fallback for short strings |
+| OCR.space | OCR | 25,000 requests/month, 500/day per IP, 1 MB / 3-page PDF cap | https://ocr.space/ocrapi | document-ingestion candidate for agency paperwork |
+| Resend | email | 3,000 emails/month, 100/day, 3 inboxes | https://resend.com/pricing | transactional-email candidate alongside docs/39 paths |
+
+Exclusions recorded 2026-11-15 (do not pool):
+
+- **NLLB-200 family** — CC-BY-NC 4.0, non-commercial only
+  (https://github.com/facebookresearch/fairseq/issues/5647); banned for
+  client-facing translation.
+- **bodhan-ai/indic-translate** — Indic Open Model License v1.0 permits
+  commercial use but the 7.9B model needs a 24 GB+ GPU (15.9 GB bf16) and
+  written sign-off to host as an API; infeasible on OCI A1 free instances.
+- **Hugging Face serverless inference as a production path** — free users now
+  need purchased credits; Hugging Face stays model-distribution +
+  benchmarking only.
+
+Withdrawn 2026-11-15:
+
+- **Mistral La Plateforme free tier** — removed by the provider
+  (community-corroborated, unrestored 1+ month at 2026-11-15); the mistral
+  adapter stays in the codebase but no free pool entry remains.
+- **Modal.com hosting** — paid (one-time trial credits only); withdrawn from
+  the hosting pool by founder decision. The verified token stays unused.
+
 ## Standing rules (unchanged)
 
 - v5.3.2 §5G still governs monitoring: security audit events live in the
