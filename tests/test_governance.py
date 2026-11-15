@@ -37,6 +37,38 @@ def test_audit_chain_valid_and_detects_tampering(db, seed) -> None:
     assert governance.verify_audit_chain(db) is False
 
 
+def test_audit_chain_survives_concurrent_appends(db, seed) -> None:
+    """Parallel record_audit transactions must not fork the hash chain.
+
+    Live incident 2026-11-15 (T-024): two benchmark runs appending audit
+    events concurrently both read the same tail and forked the chain —
+    every later restore drill failed verify_audit_chain. The
+    pg_advisory_xact_lock in record_audit serializes appends.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlalchemy.orm import Session
+
+    engine = db.get_bind()
+    barrier = threading.Barrier(4)
+
+    def append(i: int) -> None:
+        with Session(engine) as session:
+            barrier.wait()  # maximize the race window
+            governance.record_audit(
+                session, tenant_id=seed.tenant.id, actor_type="SYSTEM",
+                actor_id=f"worker-{i}", action="concurrent.append",
+                resource_type="x", resource_id=str(i),
+            )
+            session.commit()
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(append, range(4)))
+    db.expire_all()
+    assert governance.verify_audit_chain(db) is True
+
+
 def test_audit_update_delete_blocked_by_database(db, seed) -> None:
     governance.record_audit(db, tenant_id=seed.tenant.id, actor_type="USER",
                             actor_id="u1", action="x.y", resource_type="z", resource_id="1")

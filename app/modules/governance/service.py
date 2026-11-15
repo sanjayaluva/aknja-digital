@@ -45,6 +45,12 @@ def record_audit(
     payload = payload or {}
     if not payload_hash:
         payload_hash = canonical_payload_hash(payload)
+    # Serialize chain appends: without this lock, two concurrent record_audit
+    # transactions (e.g. parallel benchmark runs, observed live 2026-11-15)
+    # both read the same tail and fork the hash chain → every later drill
+    # fails verify_audit_chain. READ COMMITTED + xact-scoped lock makes each
+    # append see the previous commit.
+    db.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": 813501})
     prev = db.scalar(
         select(AuditEvent.entry_hash).order_by(AuditEvent.id.desc()).limit(1)
     )
