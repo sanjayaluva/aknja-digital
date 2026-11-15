@@ -88,3 +88,27 @@ Benchmarks (records 730c4974 translation-only, c7d5113e full):
   requirements+code_review).
 - classification 62%, summarization 0%, proposal_draft 25%, qa_review 50%
   -> gated until a passing re-run (flash capacity may change this).
+
+## Client translation + gate self-lock fix + AI-workflow e2e — 2026-11-15 (T-025)
+
+- client-facing translation LIVE (portal /portal/translate): walks the
+  ToolGateway llm.generate path (data-class screening, quota, tool audit),
+  client daily limit 50/day (audit-counted), credential-shape screen,
+  hash-only audit (raw text never persisted). Unit tests 6/6; browser e2e
+  with a REAL provider passed.
+- GATE SELF-LOCK BUG (live incident): three concurrent benchmark launches
+  (two SSH-channel timeouts had silently started the processes) produced,
+  after the FIRST real groq run scored an honest 52% (21/36), two more runs
+  whose every scenario was gate-blocked -> 0% rows of self-referential
+  evidence that locked groq + openrouter out of all tasks. Fix (d9b5401):
+  the benchmark runner passes bypass_quality_gate=True — the gate is fed BY
+  benchmarks and must never block the re-measurement. Regression test
+  covers bad-run-gates -> good-re-run-lifts.
+- AI-workflow e2e (tests/e2e/test_e2e_ai_workflows.py): real input ->
+  governed inference -> real output for ALL SEVEN task profiles across both
+  domains (DM: translation via the portal page, classification,
+  summarization; SE: requirements, code_review, qa_review, proposal_draft)
+  with a real free provider. Free-tier upstream throttling handled by
+  pacing + governed-retry pauses.
+- providers.png visual baseline refreshed (stale since T-023 added the
+  indictrans2 candidate rows).
