@@ -59,11 +59,11 @@ def _settings(tmp_path, **overrides) -> Settings:
 def test_sigv4_query_string_is_signed_and_order_insensitive() -> None:
     """ListObjectsV2-style requests: the query string is part of the canonical
     request (the pre-T-024 empty-string bug produced 403 SignatureDoesNotMatch)."""
-    kw = dict(
-        method="GET", payload=b"", key_id="AKIAIOSFODNN7EXAMPLE",
-        secret="wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-        amz_date="20261115T120000Z", region="auto",
-    )
+    kw = {
+        "method": "GET", "payload": b"", "key_id": "AKIAIOSFODNN7EXAMPLE",
+        "secret": "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+        "amz_date": "20261115T120000Z", "region": "auto",
+    }
     canonical_order = sign_v4(url="https://s3.example.internal/bucket?list-type=2&prefix=backups%2F", **kw)
     assert canonical_order["Authorization"] == GOLDEN_AUTH_QUERY
     # a different parameter order yields the SAME signature (sorted canonical)
