@@ -13,14 +13,12 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from sqlalchemy import select
 
 from app.core.config import Settings
 from app.modules.ai.inference import llm_complete
 from app.modules.resources import service as quota
 from app.modules.resources.candidates import register_candidate_providers
 from app.modules.resources.models import ProviderAccount, ProviderProduct
-from app.modules.resources.service import record_snapshot
 from tests.test_ai_inference import _mock_client, _verify_provider
 
 
@@ -81,8 +79,8 @@ def test_candidate_registration_carries_tasks_contract(db, seed) -> None:
 
 def test_indictrans2_adapter_shape(db, seed, worker_capture) -> None:
     seen, client = worker_capture
+
     from app.core.security import utcnow
-    from datetime import timedelta
 
     register_candidate_providers(db, seed.tenant.id)
     _verify(db, seed, "indictrans2", verified_at=utcnow())
@@ -137,8 +135,9 @@ def test_translation_routes_to_task_scoped_worker_over_universal(
     translation call must land on the worker even though groq is also
     eligible — the task contract is a routing signal, not just a guard."""
     seen, client = worker_capture
-    from app.core.security import utcnow
     from datetime import timedelta
+
+    from app.core.security import utcnow
 
     register_candidate_providers(db, seed.tenant.id)
     _verify(db, seed, "groq", verified_at=utcnow() - timedelta(minutes=5))
