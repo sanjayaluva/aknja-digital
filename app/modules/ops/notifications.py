@@ -88,6 +88,14 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "ml": "മെയിന്റനൻസ് മോഡ് ഓഫാക്കി: {reason}",
         "en": "Maintenance mode OFF: {reason}",
     },
+    "incident.opened": {
+        "ml": "സംഭവം തുറന്നു: {check} — {severity}\n{detail}",
+        "en": "Incident OPENED: {check} — {severity}\n{detail}",
+    },
+    "incident.resolved": {
+        "ml": "സംഭവം പരിഹരിച്ചു: {check} — {title}",
+        "en": "Incident RESOLVED: {check} — {title}",
+    },
 }
 
 

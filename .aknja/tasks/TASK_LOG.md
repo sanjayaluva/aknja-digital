@@ -264,6 +264,35 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   ruff clean
 - failure_reason: —
 
+## T-013 — Incident automation: monitor, safe recovery, AI diagnosis (this round)
+
+- goal: implement the Phase 8 automation slice of docs/20 — injected failure
+  detected; safe recovery verified; unsafe action blocked (roadmap exit
+  criteria) — on the existing Incident/outbox/backup building blocks.
+- inputs: docs/20, roadmap Phase 8, Incident/Job/NotificationOutbox/
+  BackupRecord models, T-006 outbox, T-010 backup freshness SLO, inference
+  layer (governed fail-closed pool)
+- acceptance_criteria: checks (backup freshness SLO, notification/job queue
+  age, DB blocking locks) manage deduped incidents with timeline, severity
+  escalation and founder notification on open/resolve; recovery is an
+  EXHAUSTIVE allow-list of idempotent requeue actions with a rolling-hour
+  circuit breaker; unknown/unsafe actions raise; AI diagnosis redacts
+  secrets and fails closed without a verified provider; CLI-driven.
+- deadline: — · idempotency_key: (this commit)
+- status: COMPLETED
+- artifacts: `app/modules/ops/monitor.py` (4 checks, lifecycle, allow-list,
+  breaker, redact + diagnose), 2 notification templates (incident.opened/
+  resolved), 3 seeded settings (ops_recovery tab), CLI `monitor run` /
+  `monitor diagnose`, `tests/test_monitor.py` (11)
+- verification_evidence: 171/171 tests (11 new), ruff clean, audit
+  81/0/0/0/0; live CLI smoke on a real cluster (scratch DB, migrated,
+  seeded 49 settings): run #1 backup_freshness FAIL/CRITICAL + incident +
+  exactly one incident.opened outbox row -> run #2 same incident id (dedupe)
+  -> diagnose PENDING_MANUAL "AI_PROVIDER_ENABLED=false" (fail-closed);
+  circuit-breaker and unsafe-action-refusal covered by tests; redaction
+  order fixed (credentialed URLs before bare emails)
+- failure_reason: —
+
 ## Open items (next rounds)
 
 - T-009 (candidate): staging provisioning on OCI Always-Free ARM (SRS §2.1 erratum)

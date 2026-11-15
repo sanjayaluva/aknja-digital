@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
+import uuid
 from pathlib import Path
 
 import app.models  # noqa: F401 — register every model for the CLI
@@ -658,6 +659,52 @@ def cmd_backup_prune(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_monitor_run(_args: argparse.Namespace) -> int:
+    """Run all health checks; manage incidents; execute capped safe recovery."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.monitor import run_monitor
+
+        summary = run_monitor(db)
+        for name, result in summary.items():
+            state = "OK" if result["ok"] else f"FAIL/{result['severity']}"
+            line = f"{name}: {state}"
+            if result["incident_id"]:
+                line += f" incident={result['incident_id']}"
+            if result["recovery"]:
+                line += f" recovery={result['recovery']}"
+            print(line)
+        failures = sum(1 for r in summary.values() if not r["ok"])
+        print(f"{len(summary) - failures}/{len(summary)} checks healthy")
+        return 0 if failures == 0 else 1
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
+def cmd_monitor_diagnose(args: argparse.Namespace) -> int:
+    """AI diagnosis of one incident through the governed pool (fail-closed)."""
+    db = get_session_local()()
+    try:
+        from app.modules.ops.monitor import diagnose_incident
+
+        result = diagnose_incident(db, uuid.UUID(args.incident_id))
+        if result["status"] != "SUCCEEDED":
+            print(f"diagnosis not produced ({result['status']}): {result.get('reason', '')}")
+            return 1
+        print(result["diagnosis"])
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def cmd_maintenance_on(args: argparse.Namespace) -> int:
     """Enable the write freeze (v5.3.2 §5A controlled promotion / v5.3.1 L141)."""
     db = get_session_local()()
@@ -788,6 +835,12 @@ def main(argv: list[str] | None = None) -> int:
     p_maint_on.add_argument("--reason", default="", help="why (promotion, quota exhaustion, ...)")
     maint_sub.add_parser("off", help="disable write freeze")
     maint_sub.add_parser("status", help="show freeze state + newest backup freshness")
+    # --- incident monitor (docs/20, Phase 8) — nested subcommands ---
+    p_mon = sub.add_parser("monitor", help="health checks -> incidents -> safe recovery (docs/20)")
+    mon_sub = p_mon.add_subparsers(dest="subcommand", required=True)
+    mon_sub.add_parser("run", help="run all checks, manage incidents, capped allow-listed recovery")
+    p_mon_diag = mon_sub.add_parser("diagnose", help="AI diagnosis of one incident (fail-closed)")
+    p_mon_diag.add_argument("incident_id", help="incident UUID")
     sub.add_parser(
         "process-notifications",
         help="drain the due Telegram notification outbox (send/retry per docs/39)",
@@ -828,8 +881,10 @@ def main(argv: list[str] | None = None) -> int:
         "maintenance on": cmd_maintenance_on,
         "maintenance off": cmd_maintenance_off,
         "maintenance status": cmd_maintenance_status,
+        "monitor run": cmd_monitor_run,
+        "monitor diagnose": cmd_monitor_diagnose,
     }
-    if args.command in ("backup", "maintenance"):
+    if args.command in ("backup", "maintenance", "monitor"):
         return handlers[f"{args.command} {args.subcommand}"](args)
     return handlers[args.command](args)
 

@@ -79,6 +79,13 @@ SEEDED_SETTINGS: list[tuple[str, str, Any, str, str]] = [
      "Shown in 503 responses and the founder notification when maintenance mode activates"),
     ("backup_max_age_hours", "ops_recovery", 26, "int",
      "Freshness SLO for the newest backup (backup verify --max-age monitors this)"),
+    # Tab 8 — Operations & Recovery: incident automation (docs/20, Phase 8)
+    ("monitor_queue_warn_age_minutes", "ops_recovery", 60, "int",
+     "PENDING notifications older than this open a notification_queue incident"),
+    ("monitor_job_stuck_minutes", "ops_recovery", 30, "int",
+     "PENDING jobs past run_at by more than this open a job_queue incident"),
+    ("recovery_actions_max_per_hour", "ops_recovery", 5, "int",
+     "Circuit breaker: autonomous requeue actions per rolling hour (docs/20)"),
 ]
 
 # Settings that must never be user-editable at runtime (protected names).
