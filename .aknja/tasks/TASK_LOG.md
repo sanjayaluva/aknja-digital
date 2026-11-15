@@ -363,6 +363,10 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   an alias of TELEGRAM_ADMIN_CHAT_ID; live send-test-notification executed.
 - deadline: — · idempotency_key: (this commit)
 - status: COMPLETED (platform side) / EXTERNALLY BLOCKED (live delivery)
+  RESOLVED same day: founder supplied a fresh token; getMe 200 OK
+  (@agent_os_2026_bot, id 9258786244); governed send-test-notification
+  delivered a real message (ref a7c-4479e486c10e) and the outbox drained
+  to zero pending — docs/39 control plane fully live.
 - artifacts: scripts/build_env.py (sheet→.env mapper, values never printed),
   scripts/live_ops.py (pgserver-backed live CLI driver), config.py
   AliasChoices + populate_by_name, tests/test_config_env.py (3)
@@ -447,8 +451,6 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
 
 ## Open items (next rounds)
 
-- Fresh TELEGRAM_BOT_TOKEN from @BotFather (current one rejected 401), then
-  re-run: aknja send-test-notification (T-016 external blocker)
 - Founder console confirmations: mistral plan chat quota (limit=0), gemini/
   groq current free-tier numbers (allowances recorded conservatively)
 - Staging deployment decision: Modal (token verified) vs OCI (no
