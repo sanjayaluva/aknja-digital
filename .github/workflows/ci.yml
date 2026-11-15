@@ -98,7 +98,14 @@ jobs:
           uv run python - <<'PY'
           import os
           import psycopg
-          base = os.environ["AKNJA_E2E_DATABASE_URL"].rsplit("/", 1)[0] + "/postgres"
+          # AKNJA_E2E_DATABASE_URL is a SQLAlchemy URL (postgresql+psycopg://);
+          # raw psycopg needs the plain postgresql:// scheme.
+          base = (
+              os.environ["AKNJA_E2E_DATABASE_URL"]
+              .rsplit("/", 1)[0]
+              .replace("postgresql+psycopg://", "postgresql://", 1)
+              + "/postgres"
+          )
           with psycopg.connect(base, autocommit=True) as conn:
               conn.execute("DROP DATABASE IF EXISTS aknja_e2e WITH (FORCE)")
               conn.execute("CREATE DATABASE aknja_e2e")
@@ -116,6 +123,6 @@ jobs:
         with:
           fetch-depth: 0
       - name: Secret scan (gitleaks, pinned)
-        uses: gitleaks/gitleaks-action@ff98106e4c1b2b90b9262b644d5f3538b7c54de4 # v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2 (2025-04-17)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
