@@ -311,28 +311,36 @@ def seed_ids(server_url):
 def login(page, base_url: str, email: str, password: str) -> None:
     """Real login through the htmx form: fill, submit, wait for the redirect.
 
-    On slow shared CI runners the login XHR can stall past the wait budget
-    while later, identical logins succeed (transient runner contention —
-    55/55 pass locally). Retry once ONLY when no error box is visible: a
-    visible error is a real auth failure and must fail the test.
+    Slow shared CI runners transiently stall a request past the 30s budget
+    while later, identical requests succeed (55/55 pass locally). Retry with
+    an ALREADY-LOGGED-IN guard: /login 302s authenticated users to /admin or
+    /portal, so if a previous attempt's XHR completed late, the next
+    goto('/login') lands on the console — that is success, not a retry.
+
+    A visible #login-error is a real auth failure and never retries.
     """
-    for attempt in (1, 2):
-        page.goto(f"{base_url}/login")
-        page.fill('input[name="email"]', email)
-        page.fill('input[name="password"]', password)
-        page.click('button[type="submit"]')
-        # 30s: the first login on a cold CI runner (argon2 + session + audit
-        # writes + template compile) can exceed a tight 10s budget.
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
         try:
+            page.goto(f"{base_url}/login")
+            if "/login" not in page.url:
+                return  # already authenticated by a late-completing attempt
+            page.fill('input[name="email"]', email)
+            page.fill('input[name="password"]', password)
+            page.click('button[type="submit"]')
             page.wait_for_url(
                 lambda url: "/admin" in url or "/portal" in url, timeout=30_000
             )
             return
-        except Exception:
-            error_visible = page.locator("#login-error:not([hidden])").count() > 0
-            if error_visible or attempt == 2:
-                # surface what the page actually shows for diagnosis
-                print(f"\n[login timeout] page url={page.url}")
-                print(f"[login timeout] page content:\n{page.content()[:2000]}")
-                raise
-            page.wait_for_timeout(1_000)  # let any stalled request drain
+        except Exception as exc:  # retry any timeout/stall shape
+            try:
+                error_visible = page.locator("#login-error:not([hidden])").count() > 0
+            except Exception:  # noqa: BLE001 — page unusable for the check
+                error_visible = False
+            if error_visible:
+                raise  # real auth failure — surface immediately
+            last_error = exc
+            print(f"[login retry {attempt}] {type(exc).__name__}; page url={page.url}")
+    assert last_error is not None
+    print(f"[login failed] final page content:\n{page.content()[:2000]}")
+    raise last_error
