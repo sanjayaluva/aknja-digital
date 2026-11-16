@@ -356,8 +356,11 @@ _AI_TASK_INSTRUCTIONS: dict[str, str] = {
     "for the primary item.\n\nItems: ",
     "summarization": "Summarize the client brief below in at most 80 words. Keep the "
     "key facts, audience and dates. Output only the summary.\n\nBrief: ",
-    "translation": "Translate the text below into professional English. Render brand "
-    "names in Latin script exactly. Output only the translation.\n\nText: ",
+    # the indictrans2 worker parses this exact benchmark instruction shape
+    # (free-form phrasing gets a 400 — same lesson as the portal page, live
+    # 2026-11-16); the DM template adapts English briefs into Malayalam
+    "translation": "താഴെയുള്ള ഇംഗ്ലീഷ് വാക്യം മലയാളത്തിലേക്ക് വിവർത്തനം ചെയ്യുക. ബ്രാൻഡ് പേരുകൾ "
+    "(Aknja Digital, WhatsApp) അതേപടി നിലനിർത്തുക. വിവർത്തനം മാത്രം ഔട്ട്പുട്ട് ചെയ്യുക.\n\nവാക്യം: ",
 }
 
 

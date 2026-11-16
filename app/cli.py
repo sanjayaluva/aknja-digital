@@ -491,6 +491,7 @@ def cmd_llm_ping(args: argparse.Namespace) -> int:
     try:
         from sqlalchemy import select
 
+        from app.core.security import utcnow
         from app.modules.ai.inference import _target_product, llm_complete
         from app.modules.identity.service import bootstrap_internal_tenant
         from app.modules.resources import service as quota
@@ -499,13 +500,22 @@ def cmd_llm_ping(args: argparse.Namespace) -> int:
         tenant = bootstrap_internal_tenant(db)
         pair = _target_product(db, tenant.id, args.provider)
         if pair is not None:
-            last = db.scalar(
-                select(QuotaSnapshot.effective_usage).where(
+            last_snap = db.scalar(
+                select(QuotaSnapshot).where(
                     QuotaSnapshot.provider_product_id == pair[0].id
                 ).order_by(QuotaSnapshot.observed_at.desc()).limit(1)
             )
+            # daily metrics reset at UTC midnight: carry yesterday's usage
+            # across the boundary and every provider fail-closes at a
+            # hard-stop that has already reset (observed live 2026-11-16)
+            same_day = (
+                last_snap is not None
+                and last_snap.observed_at.date() == utcnow().date()
+            )
             quota.record_snapshot(
-                db, pair[0], provider_reported=last, confidence="MEDIUM",
+                db, pair[0],
+                provider_reported=last_snap.effective_usage if same_day else 0,
+                confidence="MEDIUM",
             )
         result = llm_complete(
             db,
