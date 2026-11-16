@@ -1,4 +1,4 @@
-T-026: catalog->delivery LIVE (224 blueprints, start-project + Run AI in admin, real artifacts on prod for BOTH domains); quota reservation ledger fixed (settle/release wired, 337 phantoms released); # Implementation Status — Core Platform Implemented (v0.1.0)
+T-026 FINAL: CI->deploy fully automated (3x live), ping timer 4h, prod readiness smoke 8/8 (full lifecycle) — OPEN FOR REAL CLIENT TESTING; T-026: catalog->delivery LIVE (224 blueprints, start-project + Run AI in admin, real artifacts on prod for BOTH domains); quota reservation ledger fixed (settle/release wired, 337 phantoms released); # Implementation Status — Core Platform Implemented (v0.1.0)
 
 **Last updated:** 15 November 2026 · see `docs/41_LOCAL_DEVELOPMENT_AND_TEST_RUNBOOK.md` for reproduction steps and `docs/42_DEPENDENCY_AUDIT.md` for dependency integrity.
 

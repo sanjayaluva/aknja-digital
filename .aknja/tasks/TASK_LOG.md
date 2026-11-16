@@ -678,6 +678,15 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   same-object repair no-op.
 - status: COMPLETED (openrouter hard-stop tail noted in docs/33)
 
+## T-026 final — full automation + readiness smoke 8/8 (this round)
+
+- CI-green auto-deploy (workflow_run, tested 3x live), aknja-ping timer
+  (4h snapshot refresh), 90s LLM budget for real slow free-tier
+  generations, per-project task idempotency, pool-mode skip refund on
+  the failover budget.
+- prod readiness smoke 8/8: full service-provider lifecycle live.
+- status: COMPLETED — system open for real client testing
+
 ## Open items (next rounds)
 
 - DONE T-024f: gemini re-enabled (gemma-4-26b-a4b-it default) and

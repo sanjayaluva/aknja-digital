@@ -145,3 +145,30 @@ Benchmarks (records 730c4974 translation-only, c7d5113e full):
   record restored + all four passed in the sandbox e2e with real calls
   earlier the same day. Re-run the dogfood steps after the pool's next
   fresh window if the hard-stop persists.
+
+## Full pipeline automation + readiness smoke 8/8 — 2026-11-16 (T-026 final)
+
+- CI -> deploy is now FULLY AUTOMATIC (workflow_run): a green CI run on main
+  deploys itself (tested live three times: 98cee85, 76c56e2, 81f9658 —
+  no manual dispatch); a tested-SHA==HEAD guard prevents rollback races;
+  the post-deploy smoke covers healthz + /portal + /login.
+- aknja-ping systemd timer (every 4h) keeps quota snapshots fresh — the
+  6h staleness fail-close can no longer take the whole pool down between
+  operator actions. First scheduled run 08:09 UTC; manual first run:
+  all four providers OK (the openrouter slow-stream window had cleared;
+  the 90s total budget also helps real slow generations).
+- Two more real delivery bugs found by the readiness smoke and FIXED:
+  (a) catalog-started task idempotency keys were per-SERVICE — a second
+      project from the same service item idempotently hit the FIRST
+      project's tasks and crashed; keys are per-project now.
+  (b) gate/adapter skips consumed the failover attempt budget — a task
+      whose specialist sits 4th in pool order (translation -> indictrans2)
+      burned its 3 attempts on quality-floor skips and never reached the
+      eligible provider. Skips refund their attempt in pool mode (target
+      mode stays terminal — the skip IS the verdict there).
+- READINESS SMOKE (scripts/t026_smoke.py, live prod): 8/8 — lead captured
+  -> qualified -> WON -> client + portal user -> project instantiated from
+  a catalog service item (4 milestones / 6 tasks) -> governed AI execution
+  with a real artifact -> UAT acceptance recorded AS the client owner ->
+  portal visibility. The system is end-to-end operable as a service
+  provider for real client testing.
