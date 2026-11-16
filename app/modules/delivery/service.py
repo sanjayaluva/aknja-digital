@@ -322,21 +322,15 @@ def start_project_from_service(
             title=ms["title"], weight_pct=ms.get("weight_pct", 0),
         )
         for t in ms.get("tasks", []):
-            create_task(
+            task = create_task(
                 db, tenant_id=principal.tenant_id, project_id=project.id,
                 milestone_id=milestone.id, title=t["title"],
                 description=t.get("description", ""),
-                idempotency_key=f"svc-{service.id}-m{sort_order}-{t['title'][:40]}",
+                # per-PROJECT uniqueness: a service item can start many
+                # projects and each must instantiate its own task set
+                idempotency_key=f"svc-{service.id}-p{project.id}-m{sort_order}-{t['title'][:40]}",
             )
             # wire the AI profile AFTER create_task (it is not a create param)
-            task = db.scalar(
-                select(Task).where(
-                    Task.tenant_id == principal.tenant_id,
-                    Task.project_id == project.id,
-                    Task.title == t["title"],
-                    Task.milestone_id == milestone.id,
-                )
-            )
             task.ai_task = t.get("ai_task") or None
     db.flush()
     return project

@@ -182,6 +182,32 @@ def test_start_project_instantiates_both_domain_blueprints(db, seed) -> None:
     assert {"summarization", "translation", "classification"} <= dm_ai
 
 
+def test_same_service_starts_independent_projects(db, seed) -> None:
+    """The task idempotency key is per-project: a service item can back many
+    concurrent client engagements (regression: the key used to be per-service
+    and the second project crashed on task None)."""
+    _stamped(db, seed)
+    from app.modules.delivery import service as delivery
+    from app.modules.delivery.models import Task
+
+    principal = _founder_principal(seed)
+    client = _client(db, seed)
+    service = _service_by_name(db, seed, "High-Converting Landing Page Sales Copy")
+    p1 = delivery.start_project_from_service(
+        db, principal=principal, client_id=client.id, service_id=service.id,
+        name="Engagement A", brief="First client campaign.")
+    db.commit()
+    p2 = delivery.start_project_from_service(
+        db, principal=principal, client_id=client.id, service_id=service.id,
+        name="Engagement B", brief="Second client campaign.")
+    db.commit()
+    t1 = db.scalars(select(Task).where(Task.project_id == p1.id)).all()
+    t2 = db.scalars(select(Task).where(Task.project_id == p2.id)).all()
+    assert len(t1) == 6 and len(t2) == 6
+    assert {t.id for t in t1}.isdisjoint({t.id for t in t2})
+    assert all(t.milestone_id for t in t2)  # full blueprint, not idempotent stubs
+
+
 def test_start_project_rejects_unstamped_service(db, seed) -> None:
     _import_taxonomy(db, seed)  # no stamping
     from app.core.errors import ConflictError
