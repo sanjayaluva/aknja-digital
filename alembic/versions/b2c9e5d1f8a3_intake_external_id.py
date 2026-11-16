@@ -4,8 +4,10 @@ Revision ID: b2c9e5d1f8a3
 Revises: a1b8d4f0c3e7
 Create Date: 2026-11-16
 """
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = "b2c9e5d1f8a3"
 down_revision: str | None = "a1b8d4f0c3e7"
