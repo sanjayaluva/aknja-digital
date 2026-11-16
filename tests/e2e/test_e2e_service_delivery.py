@@ -48,11 +48,9 @@ def _run_ai_step(page, task_title: str) -> str:
         # provider call finishes (20s+ on the free tier) — a plain click
         # would wait for that navigation and time out at 30s.
         row.locator("button", has_text="Run AI").dispatch_event("click")
-        # the governed call can take 20s+ on the free tier
-        try:
-            page.wait_for_selector("text=AI step completed", timeout=180_000)
-        except Exception:
-            pass  # fall through to the outcome banner check below
+        # wait for either banner (success or the governed fail-closed outcome)
+        page.wait_for_selector(
+            "text=AI step completed, text=AI step outcome", timeout=180_000)
         body = page.text_content("body") or ""
         if "AI step completed" in body:
             time.sleep(6)  # pace against the free-tier burst limiter
