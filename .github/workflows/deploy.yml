@@ -1,9 +1,13 @@
 name: deploy
 
-# T-023 (docs/43): workflow_dispatch deploy over SSH. The runner holds the
-# dedicated deploy key (GitHub secret OCI_DEPLOY_KEY); on the instance the
-# key is restricted to the aknja-deploy.sh wrapper (command= in
-# authorized_keys), which only accepts a 40-char commit SHA.
+# T-023 (docs/43): deploy over SSH with the dedicated key (GitHub secret
+# OCI_DEPLOY_KEY); on the instance the key is restricted to the
+# aknja-deploy.sh wrapper (command= in authorized_keys), which only accepts
+# a 40-char commit SHA.
+#
+# T-026: fully automated — a green CI run on main deploys itself
+# (workflow_run). workflow_dispatch stays available for manual/pinned
+# deploys and rollbacks to an explicit SHA.
 
 on:
   workflow_dispatch:
@@ -12,6 +16,9 @@ on:
         description: "commit SHA to deploy (empty = current main HEAD)"
         required: false
         default: ""
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 concurrency:
   group: deploy-production
@@ -19,6 +26,14 @@ concurrency:
 
 jobs:
   deploy-production:
+    # automated path: only green CI runs whose tested commit is still the
+    # main HEAD (a newer push means its own CI run will deploy instead —
+    # prevents an older SHA rolling back a newer deploy)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_sha == github.sha)
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -27,6 +42,8 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.sha }}" ]; then
             echo "value=${{ github.event.inputs.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "value=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           else
             echo "value=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
@@ -44,4 +61,7 @@ jobs:
 
       - name: External smoke check
         run: |
+          # health + the two customer-facing surfaces must answer after a deploy
           curl -sf --max-time 30 https://aknja.pp.ua/healthz | tee /dev/stderr | grep '"env":"production"'
+          curl -sf --max-time 30 -o /dev/null https://aknja.pp.ua/portal
+          curl -sf --max-time 30 -o /dev/null https://aknja.pp.ua/login

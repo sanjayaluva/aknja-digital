@@ -80,7 +80,11 @@ class Settings(BaseSettings):
     # tunnel (localhost from instance-1's perspective).
     indictrans2_base_url: str = "http://127.0.0.1:8001"
     indictrans2_api_key: SecretStr = SecretStr("")      # shared bearer token
-    llm_default_timeout_s: int = 20
+    # per-read HTTP timeout; the total request budget is max(60, x3) — 90s at
+    # this default, which keeps the anti-trickle guard (a :free model was
+    # observed streaming 7+ minutes) while leaving room for real slow
+    # generations on the free tier (requirements JSON ran ~40-70s live)
+    llm_default_timeout_s: int = 30
 
     # --- Upload limits ---
     max_upload_bytes: int = 20 * 1024 * 1024

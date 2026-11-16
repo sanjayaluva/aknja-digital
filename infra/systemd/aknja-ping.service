@@ -1,0 +1,11 @@
+[Unit]
+Description=Aknja free-provider quota snapshot refresh (llm-ping x4)
+Documentation=file:///home/ubuntu/aknja-digital/docs/33_FREE_TIER_AND_PROVIDER_VERIFICATION_REGISTER.md
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/aknja-ping.sh
+# the unit must never block deploys or stack up; long upstream windows are
+# tolerated and the next timer run re-observes
+TimeoutStartSec=20min

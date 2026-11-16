@@ -14,6 +14,16 @@ export PATH="$HOME/.local/bin:$PATH"
 git fetch origin main
 git checkout -f main
 git reset --hard "$SHA"
+# ---- quota snapshot timer (T-026: snapshots stale after 6h fail-close the
+# whole free pool; the timer re-observes every 4h). Idempotent on every
+# deploy so the units stay in sync with the repo.
+if [ -d infra/systemd ] && [ -f infra/oci/aknja-ping.sh ]; then
+  install -m 755 infra/oci/aknja-ping.sh /home/ubuntu/aknja-ping.sh
+  sudo install -m 644 infra/systemd/aknja-ping.service /etc/systemd/system/aknja-ping.service
+  sudo install -m 644 infra/systemd/aknja-ping.timer /etc/systemd/system/aknja-ping.timer
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now aknja-ping.timer >/dev/null 2>&1 || true
+fi
 uv sync --frozen --python 3.12 --no-dev
 .venv/bin/alembic upgrade head
 sudo systemctl restart aknja
