@@ -1,0 +1,13 @@
+[Unit]
+Description=Aknja email intake poll (IMAP -> unified intake pipeline)
+Documentation=file:///home/ubuntu/aknja-digital/docs/34_INTEGRATION_AND_INTAKE_ROADMAP.md
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/aknja-digital
+ExecStart=/home/ubuntu/aknja-digital/.venv/bin/python -m app.cli poll-email
+# no ACTIVE email credential => no-op exit 0, so the timer is safe to run
+# before the Gmail account exists; IMAP windows are tolerated and the next
+# run picks up unseen mail (\Seen is the cursor)
+TimeoutStartSec=10min

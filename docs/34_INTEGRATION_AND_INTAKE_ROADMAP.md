@@ -93,3 +93,68 @@ Probed the production key against generativelanguage.googleapis.com:
    Requirements-extraction lane was provider-slow at that moment and
    fail-closed to empty — visible verbatim on the intake record.
 4. Readiness smoke after deploy: 8/8 green.
+
+## 6. Channel decisions (founder Q&A, 2026-11-16)
+
+### Email — verdict: Gmail inbox + Cloudflare Email Routing (both managed)
+
+Both options the founder named are supported and BOTH stay manageable:
+
+- **Recommended receive path**: create the system Gmail account, then
+  Cloudflare Email Routing (free) on aknja.pp.ua forwards
+  requests@ / ops@ / contact@ (any alias, unlimited) into that ONE inbox.
+  One IMAP poll point (T-028, live) ingests everything; the customer
+  still writes to a branded address. Cloudflare routing is receive-only,
+  so sending stays on Gmail SMTP (free ~500/day) — fine for ops replies.
+- The poller is provider-independent: any IMAP host works by changing
+  the credential config (Zoho free tier with true custom-domain
+  mailboxes, or a self-hosted server later) — no code change.
+- Automation: `aknja-email.timer` polls every 5 min; no-op until an
+  ACTIVE EMAIL credential exists, so it is safe to enable already.
+  First-poll guard: mail older than 7 days is marked seen and skipped.
+
+### Telegram — verdict: existing bot CAN be reused; new bot recommended
+
+Probed live: the current bot is @agent_os_2026_bot, webhook NONE (pure
+outbound digest/approvals), 4 unread pending updates, group privacy ON.
+- A Telegram bot is public by nature — anyone who finds @name can
+  message it; with a webhook set, those messages reach our intake.
+- Reusing @agent_os_2026_bot is NOT mandatory and NOT recommended: it is
+  the founder's approval/digest channel; mixing public inbound into it
+  blurs the trust boundary (a stranger's text would sit next to approval
+  traffic). A second bot is free and takes 2 minutes at @BotFather
+  ("newbot", copy the token, register it in Admin > Integrations with
+  provider_key telegram_bot, Test, then run
+  `python -m app.cli telegram-set-webhook`).
+- T-029 webhook is live: verifies X-Telegram-Bot-Api-Secret-Token,
+  deduplicates by update_id, ACKs in milliseconds before the AI runs.
+
+### WhatsApp — verdict: manual intake now; WAHA/Cloud API deferred (T-030)
+
+- **Cloud API (official)**: receiving user-initiated service
+  conversations is free, BUT onboarding needs Meta business verification
+  and a dedicated number — real friction for a solo founder.
+- **WAHA (self-hosted, free)**: would dodge cost/verification but rides
+  the unofficial WhatsApp Web channel — ban risk for the number, plus a
+  gateway process to babysit on a 4 GB ARM box. Not worth it at current
+  volume.
+- **Decision**: WhatsApp stays on the manual intake path (already live —
+  paste the message, channel=WHATSAPP, AI classification + lead + notify
+  all work). Revisit Cloud API vs WAHA when inbound WhatsApp volume
+  justifies it (docs/34 T-030).
+
+## 7. T-028/T-029 scope (landed 2026-11-16)
+
+- `integrations/email_poll.py`: IMAP UNSEEN -> header+body record ->
+  intake pipeline (EMAIL channel) -> `\Seen` cursor; per-provider error
+  isolation; injectable IMAP client for tests.
+- `ui/hooks.py`: POST /hooks/telegram/{provider_key} — secret-token
+  verification, update_id idempotency (intake_messages.external_id,
+  unique index), persist-then-ACK ordering, non-text updates deferred
+  until T-031, no 500s (no Telegram retry storms).
+- CLI: `poll-email` (timer-safe no-op), `telegram-set-webhook`
+  (generates + stores the webhook secret, calls setWebhook).
+- infra: aknja-email.service/.timer (5 min), installed idempotently by
+  the deploy script. Tests: 6 new (stub-IMAP pipeline incl. old-mail
+  skip + provider failure isolation; webhook 404/403/ingest/dedupe/
+  defer). Suite: 213 green.

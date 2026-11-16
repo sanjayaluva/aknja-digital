@@ -24,6 +24,15 @@ if [ -d infra/systemd ] && [ -f infra/oci/aknja-ping.sh ]; then
   sudo systemctl daemon-reload
   sudo systemctl enable --now aknja-ping.timer >/dev/null 2>&1 || true
 fi
+# ---- email intake timer (T-028: IMAP poll into the unified intake
+# pipeline). No-op until an ACTIVE email credential exists, so it is safe
+# to enable before the Gmail account is registered. Idempotent per deploy.
+if [ -f infra/systemd/aknja-email.service ]; then
+  sudo install -m 644 infra/systemd/aknja-email.service /etc/systemd/system/aknja-email.service
+  sudo install -m 644 infra/systemd/aknja-email.timer /etc/systemd/system/aknja-email.timer
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now aknja-email.timer >/dev/null 2>&1 || true
+fi
 uv sync --frozen --python 3.12 --no-dev
 .venv/bin/alembic upgrade head
 sudo systemctl restart aknja

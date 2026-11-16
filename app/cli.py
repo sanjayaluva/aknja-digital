@@ -619,6 +619,81 @@ def cmd_send_test_notification(args: argparse.Namespace) -> int:
         db.close()
 
 
+
+def cmd_poll_email(args: argparse.Namespace) -> int:
+    """Poll ACTIVE email credentials and feed unseen mail into intake (T-028).
+
+    Designed for a systemd timer; a run without any ACTIVE email credential
+    is a no-op (exit 0) so the timer can be installed before Gmail exists.
+    """
+    db = get_session_local()()
+    try:
+        from app.modules.identity.service import bootstrap_internal_tenant
+        from app.modules.integrations.email_poll import poll_email_inbox
+
+        tenant = bootstrap_internal_tenant(db)
+        summary = poll_email_inbox(db, tenant_id=tenant.id, settings=get_settings())
+        db.commit()
+        print(f"email poll: providers={summary['providers']} "
+              f"fetched={summary['fetched']} converted={summary['converted']} "
+              f"needs_review={summary['needs_review']} rejected={summary['rejected']}")
+        for err in summary.get("errors", []):
+            print(f"  ! {err}")
+        return 0
+    finally:
+        db.close()
+
+
+def cmd_telegram_set_webhook(args: argparse.Namespace) -> int:
+    """Point an ACTIVE telegram bot credential at our public webhook (T-029).
+
+    Generates and stores a webhook secret when absent (rotating it is just
+    re-running this command), then calls Telegram setWebhook.
+    """
+    db = get_session_local()()
+    try:
+        import uuid as _uuid
+
+        import httpx
+        from sqlalchemy import select
+
+        from app.modules.identity.service import Principal, bootstrap_internal_tenant
+        from app.modules.integrations import service as integrations
+        from app.modules.integrations.models import IntegrationCredential
+
+        tenant = bootstrap_internal_tenant(db)
+        row = db.scalar(select(IntegrationCredential).where(
+            IntegrationCredential.provider_key == args.provider,
+            IntegrationCredential.provider_type == "MESSAGING",
+            IntegrationCredential.tenant_id == tenant.id))
+        if row is None or row.status != "ACTIVE":
+            print(f"no ACTIVE MESSAGING credential '{args.provider}' — "
+                  "register and activate it in Admin > Integrations first")
+            return 1
+        settings = get_settings()
+        secrets = integrations._decrypt(settings, row.payload_encrypted)
+        if not secrets.get("webhook_secret"):
+            secrets["webhook_secret"] = _uuid.uuid4().hex
+            row.payload_encrypted = integrations._encrypt(settings, secrets)
+            db.flush()
+        base = (row.config or {}).get("public_base_url", "https://aknja.pp.ua")
+        url = f"{base.rstrip('/')}/hooks/telegram/{args.provider}"
+        token = secrets.get("bot_token", "")
+        resp = httpx.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={"url": url, "secret_token": secrets["webhook_secret"],
+                  "allowed_updates": ["message"]},
+            timeout=30)
+        ok = resp.status_code == 200 and resp.json().get("ok")
+        db.commit()
+        print(f"setWebhook -> {url}: {'OK' if ok else resp.text[:200]}")
+        print("inbound messages will now flow into Admin > Intake "
+              "(classification runs through the governed pool)")
+        return 0 if ok else 1
+    finally:
+        db.close()
+
+
 def cmd_run_llm_benchmark(args: argparse.Namespace) -> int:
     """Run the v5.3.2 §6 quality benchmark against one provider (no failover).
 
@@ -1073,6 +1148,18 @@ def main(argv: list[str] | None = None) -> int:
                          help="comma-separated task profiles (default: all seven)")
     p_bench.add_argument("--languages", default=None,
                          help="comma-separated languages (default: ml,en,hi,ta)")
+    p_email = subparsers.add_parser(
+        "poll-email",
+        help="poll ACTIVE email credentials (IMAP) into the intake pipeline",
+    )
+    p_email.add_argument("--provider", default=None,
+                         help="reserved: poll a single provider key (default: all)")
+    p_hook = subparsers.add_parser(
+        "telegram-set-webhook",
+        help="point an ACTIVE telegram bot credential at /hooks/telegram/<key>",
+    )
+    p_hook.add_argument("--provider", default="telegram_bot",
+                        help="credential provider_key (default: telegram_bot)")
     args = parser.parse_args(argv)
 
     get_settings()  # load config eagerly for clear failure
@@ -1090,6 +1177,8 @@ def main(argv: list[str] | None = None) -> int:
         "process-notifications": cmd_process_notifications,
         "send-test-notification": cmd_send_test_notification,
         "run-llm-benchmark": cmd_run_llm_benchmark,
+        "poll-email": cmd_poll_email,
+        "telegram-set-webhook": cmd_telegram_set_webhook,
         "backup create": cmd_backup_create,
         "backup verify": cmd_backup_verify,
         "backup drill": cmd_backup_drill,

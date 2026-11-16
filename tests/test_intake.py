@@ -116,7 +116,7 @@ def test_reprocess_keeps_original_and_creates_fresh_row(db, seed, monkeypatch):
     db.commit()
     monkeypatch.setattr(svc, "llm_complete", lambda *a, **k: _ai(
         "SUCCEEDED", _CLASSIFIED))
-    monkeypatch.setattr(svc, "_EXTRACT_PROMPT", "{content}")  # noqa: direct
+    monkeypatch.setattr(svc, "_EXTRACT_PROMPT", "{content}")
     second = intake.reprocess_intake_message(
         db, principal=_principal(seed), message_id=first.id)
     db.commit()

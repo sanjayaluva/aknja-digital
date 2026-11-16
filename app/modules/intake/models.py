@@ -42,6 +42,11 @@ class IntakeMessage(Base, TimestampMixin):
     lead_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("leads.id"), nullable=True
     )
+    # channel message id for idempotency: "telegram:{update_id}",
+    # "email:{Message-ID}" — a provider retry must never double-ingest
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )

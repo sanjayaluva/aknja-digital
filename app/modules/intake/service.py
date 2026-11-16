@@ -4,6 +4,10 @@ extraction -> Lead + admin notification (docs/34 §2.3, brief §1.4/§2/§3).
 Fail-closed by design: when no governed AI provider is available the record
 stops at NEEDS_REVIEW with the reason stored — no phantom leads, no silent
 drops, and nothing customer-facing happens without the admin.
+
+One pipeline, every entry path: the admin form, the email poller (T-028)
+and the Telegram webhook (T-029) all persist an IntakeMessage first, then
+call `process_record` — identical verdicts and audit trails everywhere.
 """
 
 from __future__ import annotations
@@ -14,6 +18,8 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import AppError
+from app.core.security import utcnow
 from app.modules.ai.inference import llm_complete
 from app.modules.governance.service import record_audit
 from app.modules.identity.service import Principal
@@ -67,11 +73,9 @@ def submit_intake_message(
     channel: str,
     sender: str,
     content: str,
+    external_id: str | None = None,
 ) -> IntakeMessage:
-    """One inbound message through the full governed pipeline."""
-    from app.modules.crm import service as crm
-    from app.modules.ops.notifications import notify_admin
-
+    """Persist one inbound message, then run the governed pipeline on it."""
     channel = channel.upper()
     if channel not in CHANNELS:
         raise ValueError(f"channel must be one of {CHANNELS}")
@@ -86,55 +90,70 @@ def submit_intake_message(
         raw_content=content,
         status="RECEIVED",
         created_by=principal.user_id if channel == "MANUAL" else None,
+        external_id=external_id,
     )
     db.add(msg)
     db.flush()
+    return process_record(db, principal=principal, record=msg)
+
+
+def process_record(
+    db: Session, *, principal: Principal, record: IntakeMessage
+) -> IntakeMessage:
+    """Classification -> requirements extraction -> lead + notification on an
+    already-persisted record. Shared by every entry path (§3 transparency:
+    the raw input and both AI outputs land on the record verbatim)."""
+    from app.modules.crm import service as crm
+    from app.modules.ops.notifications import notify_admin
+
+    channel = record.channel
+    content = record.raw_content
 
     # 1) classification — is this a project inquiry at all?
     cls = llm_complete(
         db, tenant_id=principal.tenant_id, task="classification",
-        prompt=_CLASSIFY_PROMPT.format(sender=msg.sender, channel=channel,
+        prompt=_CLASSIFY_PROMPT.format(sender=record.sender, channel=channel,
                                        content=content[:6000]),
     )
     classification: dict = {"status": cls.status, "provider": cls.provider,
                             "raw_response": (cls.text or "")[:4000]}
     if cls.status != "SUCCEEDED":
-        msg.status = "NEEDS_REVIEW"
-        msg.ai_classification = classification
-        msg.notes = f"classification unavailable: {cls.reason}"
+        record.status = "NEEDS_REVIEW"
+        record.ai_classification = classification
+        record.notes = f"classification unavailable: {cls.reason}"
         db.flush()
         record_audit(
             db, tenant_id=principal.tenant_id, actor_type="SYSTEM",
             actor_id="intake", action="intake.needs_review",
-            resource_type="intake_message", resource_id=str(msg.id),
+            resource_type="intake_message", resource_id=str(record.id),
             payload={"channel": channel, "reason": cls.reason},
         )
-        return msg
+        return record
     parsed = _parse_json(cls.text or "")
     if parsed is None:
-        msg.status = "NEEDS_REVIEW"
+        record.status = "NEEDS_REVIEW"
         classification["parse_error"] = True
-        msg.ai_classification = classification
-        msg.notes = "classification output was not valid JSON"
+        record.ai_classification = classification
+        record.notes = "classification output was not valid JSON"
         db.flush()
-        return msg
+        return record
     classification.update(parsed)
-    msg.ai_classification = classification
+    record.ai_classification = classification
     db.flush()
 
     if not parsed.get("is_project_inquiry"):
-        msg.status = "REJECTED"  # classified: not a project inquiry
+        record.status = "REJECTED"  # classified: not a project inquiry
         db.flush()
         record_audit(
             db, tenant_id=principal.tenant_id, actor_type="SYSTEM",
             actor_id="intake", action="intake.rejected",
-            resource_type="intake_message", resource_id=str(msg.id),
+            resource_type="intake_message", resource_id=str(record.id),
             payload={"channel": channel, "summary": parsed.get("summary", "")},
         )
-        return msg
+        return record
 
     # 2) requirements extraction for real inquiries
-    msg.status = "CLASSIFIED"
+    record.status = "CLASSIFIED"
     ext = llm_complete(
         db, tenant_id=principal.tenant_id, task="requirements",
         prompt=_EXTRACT_PROMPT.format(content=content[:6000]),
@@ -147,46 +166,46 @@ def submit_intake_message(
             extraction.update(parsed_ext)
         else:
             extraction["parse_error"] = True
-    msg.ai_extraction = extraction
+    record.ai_extraction = extraction
     db.flush()
 
     # 3) lead + admin notification — the workflow entry point
     title = (extraction.get("suggested_title")
-             or f"Inquiry from {msg.sender} ({channel})")
+             or f"Inquiry from {record.sender} ({channel})")
     description = (
-        f"Intake ({channel}) from {msg.sender}. AI summary: "
+        f"Intake ({channel}) from {record.sender}. AI summary: "
         f"{classification.get('summary', '')}\n\nRequirements:\n"
         + "\n".join(f"- {r}" for r in extraction.get("requirements", [])[:12])
         + ("\n\nMissing information:\n" + "\n".join(
             f"- {m}" for m in extraction.get("missing_info", [])[:8])
            if extraction.get("missing_info") else "")
-        + f"\n\nSource record: intake_messages/{msg.id}"
+        + f"\n\nSource record: intake_messages/{record.id}"
     )
     lead = crm.create_lead(
         db, principal=principal, title=title[:200], source=channel,
         description=description[:5000],
-        contact_email=_looks_like_email(msg.sender),
+        contact_email=_looks_like_email(record.sender),
     )
-    msg.lead_id = lead.id
-    msg.status = "CONVERTED"
+    record.lead_id = lead.id
+    record.status = "CONVERTED"
     db.flush()
     notify_admin(
         db,
         template_key="intake.received",
-        payload={"channel": channel, "sender": msg.sender,
+        payload={"channel": channel, "sender": record.sender,
                  "summary": classification.get("summary", "")[:120],
                  "lead_title": lead.title},
-        idempotency_key=f"intake:{msg.id}",
+        idempotency_key=f"intake:{record.id}",
         tenant_id=principal.tenant_id,
     )
     record_audit(
         db, tenant_id=principal.tenant_id, actor_type="SYSTEM",
         actor_id="intake", action="intake.converted",
-        resource_type="intake_message", resource_id=str(msg.id),
+        resource_type="intake_message", resource_id=str(record.id),
         payload={"channel": channel, "lead_id": str(lead.id),
                  "domain": classification.get("service_domain", "")},
     )
-    return msg
+    return record
 
 
 def reprocess_intake_message(
@@ -203,4 +222,5 @@ def reprocess_intake_message(
     return submit_intake_message(
         db, principal=principal, channel=row.channel, sender=row.sender,
         content=row.raw_content,
+        external_id=row.external_id,
     )
