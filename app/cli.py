@@ -657,7 +657,7 @@ def cmd_telegram_set_webhook(args: argparse.Namespace) -> int:
         import httpx
         from sqlalchemy import select
 
-        from app.modules.identity.service import Principal, bootstrap_internal_tenant
+        from app.modules.identity.service import bootstrap_internal_tenant
         from app.modules.integrations import service as integrations
         from app.modules.integrations.models import IntegrationCredential
 
@@ -1148,13 +1148,13 @@ def main(argv: list[str] | None = None) -> int:
                          help="comma-separated task profiles (default: all seven)")
     p_bench.add_argument("--languages", default=None,
                          help="comma-separated languages (default: ml,en,hi,ta)")
-    p_email = subparsers.add_parser(
+    p_email = sub.add_parser(
         "poll-email",
         help="poll ACTIVE email credentials (IMAP) into the intake pipeline",
     )
     p_email.add_argument("--provider", default=None,
                          help="reserved: poll a single provider key (default: all)")
-    p_hook = subparsers.add_parser(
+    p_hook = sub.add_parser(
         "telegram-set-webhook",
         help="point an ACTIVE telegram bot credential at /hooks/telegram/<key>",
     )

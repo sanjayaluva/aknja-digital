@@ -1,4 +1,4 @@
-"""Email ingestion: IMAP UNSEEN -> unified intake (docs/34, T-028).
+r"""Email ingestion: IMAP UNSEEN -> unified intake (docs/34, T-028).
 
 Architecture decision (founder brief 2026-11-16, verdict in docs/34 §6):
 custom-domain addresses on aknja.pp.ua forward into one system Gmail
@@ -17,18 +17,17 @@ from __future__ import annotations
 import email
 import email.policy
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import utcnow
+from app.core.config import Settings
 from app.modules.governance.service import record_audit
 from app.modules.identity.service import Principal, bootstrap_internal_tenant
 from app.modules.integrations.models import IntegrationCredential
 from app.modules.integrations.service import _decrypt
-from app.core.config import Settings
 
 MAX_MESSAGES_PER_POLL = 25
 MAX_AGE_DAYS = 7  # first poll after registration must not ingest ancient mail
@@ -62,7 +61,7 @@ def _plaintext_body(msg: email.message.EmailMessage) -> str:
             if part.get_content_type() == "text/plain" and not part.get_filename():
                 try:
                     return part.get_content()
-                except Exception:  # noqa: BLE001 - decoding is best-effort
+                except Exception:  # noqa: BLE001, S112 - undecodable part: skip to next
                     continue
         return ""
     try:
@@ -95,7 +94,7 @@ def poll_email_inbox(
     *,
     tenant_id: uuid.UUID,
     settings: Settings,
-    imap_factory: Callable[..., "object"] | None = None,
+    imap_factory: Callable[..., object] | None = None,
     limit: int = MAX_MESSAGES_PER_POLL,
 ) -> dict:
     """Poll every ACTIVE EMAIL credential; feed unseen mail into intake.
@@ -122,7 +121,7 @@ def poll_email_inbox(
 
     principal = system_principal(db)
     factory = imap_factory or imaplib.IMAP4_SSL
-    cutoff = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=MAX_AGE_DAYS)
     summary["providers"] = len(rows)
 
     for row in rows:

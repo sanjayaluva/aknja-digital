@@ -18,8 +18,6 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
-from app.core.security import utcnow
 from app.modules.ai.inference import llm_complete
 from app.modules.governance.service import record_audit
 from app.modules.identity.service import Principal

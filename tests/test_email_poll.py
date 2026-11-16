@@ -5,7 +5,7 @@ from __future__ import annotations
 import email
 import email.policy
 import email.utils
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -14,9 +14,9 @@ from app.core.config import Settings
 from app.core.enums import UserRole
 from app.modules.crm.models import Lead
 from app.modules.identity.service import Principal
+from app.modules.intake.models import IntakeMessage
 from app.modules.integrations import service as integrations
 from app.modules.integrations.email_poll import poll_email_inbox
-from app.modules.intake.models import IntakeMessage
 
 
 def _principal(seed) -> Principal:
@@ -83,8 +83,8 @@ def _register_gmail(db, seed):
 
 def test_poll_feeds_inbox_into_intake_and_marks_seen(db, seed, monkeypatch):
     import app.modules.intake.service as intake_svc
-    recent = datetime.now(timezone.utc) - timedelta(hours=2)
-    old = datetime.now(timezone.utc) - timedelta(days=30)
+    recent = datetime.now(UTC) - timedelta(hours=2)
+    old = datetime.now(UTC) - timedelta(days=30)
     stub = StubIMAP({
         b"1": _mime("Website needed", "I need a bakery website with online "
                                       "ordering. Budget 20000 rupees.", recent),

@@ -66,9 +66,9 @@ async def telegram_webhook(
             # does not retry an update we intentionally defer
             return JSONResponse({"ok": True, "deferred": "non-text update"})
 
-        from app.modules.integrations.email_poll import system_principal
         from app.modules.intake import service as intake
         from app.modules.intake.models import IntakeMessage
+        from app.modules.integrations.email_poll import system_principal
 
         # 1) idempotency: a retry of the same update_id is a no-op
         external_id = f"telegram:{update_id}" if update_id else None

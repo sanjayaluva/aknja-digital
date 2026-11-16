@@ -7,12 +7,11 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.config import get_settings
 from app.core.enums import UserRole
 from app.modules.identity.service import Principal
+from app.modules.intake.models import IntakeMessage
 from app.modules.integrations import service as integrations
 from app.modules.integrations.models import IntegrationCredential
-from app.modules.intake.models import IntakeMessage
 
 
 def _principal(seed) -> Principal:
