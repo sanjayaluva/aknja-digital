@@ -36,7 +36,11 @@ from app.modules.ai.benchmark import benchmark_gate
 from app.modules.ai.models import LLMCallLog
 from app.modules.governance.service import record_audit
 from app.modules.resources.models import ProviderAccount, ProviderProduct
-from app.modules.resources.service import admit_usage
+from app.modules.resources.service import (
+    admit_usage,
+    release_reservation,
+    settle_reservation,
+)
 
 TEMPLATE_VERSION = "v1"
 
@@ -473,6 +477,8 @@ def llm_complete(
                     resource_id=str(product.id), payload={"reason": reason, "task": task},
                 )
                 exclude.append(product.id)
+                if decision.reservation_id:
+                    release_reservation(db, decision.reservation_id)
                 continue
             adapter = ADAPTERS.get(account.provider)
             api_key = _provider_key(account.provider, settings)
@@ -489,6 +495,8 @@ def llm_complete(
                     resource_id=str(product.id), payload={"reason": reason},
                 )
                 exclude.append(product.id)
+                if decision.reservation_id:
+                    release_reservation(db, decision.reservation_id)
                 continue
 
             resolved_model = model or _default_model(account.provider)
@@ -505,6 +513,8 @@ def llm_complete(
                     attempts=result.attempts
                     + [{"provider": account.provider, "status": "SUCCEEDED"}],
                 )
+                if decision.reservation_id:
+                    settle_reservation(db, decision.reservation_id, actual_usage=1)
                 _log_call(db, tenant_id=tenant_id, task=task, provider=account.provider,
                           model=resolved_model, status="SUCCEEDED", latency_ms=latency_ms,
                           prompt_hash=prompt_hash)
@@ -518,6 +528,8 @@ def llm_complete(
                 return result
             except LLMProviderError as exc:
                 latency_ms = int((time.monotonic() - started) * 1000)
+                if decision.reservation_id:
+                    release_reservation(db, decision.reservation_id)
                 result.attempts.append(
                     {"provider": account.provider, "status": "FAILED", "reason": str(exc)}
                 )
