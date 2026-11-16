@@ -660,6 +660,24 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   enforced at the form). Production-verified in all four directions.
 - status: COMPLETED
 
+## T-026 — catalog->delivery flow, both-domain dogfood, quota ledger fixes (this round)
+
+- BUILT: service items carry delivery blueprints (SE + DM domains, 224
+  items stamped); start project from catalog (admin UI + service layer);
+  governed AI task execution with inline artifacts; human-verify state
+  machine (AI -> REVIEW, never auto-DONE); CLI stamp + truthful promotion.
+- TESTED: 7 unit tests + real-browser e2e driving BOTH domains end-to-end
+  (catalog item -> project -> REAL AI artifact -> portal), 195 unit tests
+  green, CI green.
+- DOGFOOD LIVE: two real projects on prod (Showcase App SE + Launch
+  Marketing DM) with real AI artifacts (code review via groq, Malayalam
+  campaign copy via indictrans2).
+- FIXED (found by the dogfood): reservation settle/release never wired
+  (337 phantom reservations hard-stopped the whole pool); ping daily-usage
+  carry across UTC midnight; gate conclusive window too narrow; JSONB
+  same-object repair no-op.
+- status: COMPLETED (openrouter hard-stop tail noted in docs/33)
+
 ## Open items (next rounds)
 
 - DONE T-024f: gemini re-enabled (gemma-4-26b-a4b-it default) and

@@ -112,3 +112,36 @@ Benchmarks (records 730c4974 translation-only, c7d5113e full):
   pacing + governed-retry pauses.
 - providers.png visual baseline refreshed (stale since T-023 added the
   indictrans2 candidate rows).
+
+## Catalog -> delivery flow + quota ledger fixes — 2026-11-16 (T-026)
+
+- The catalog and delivery module were DISCONNECTED (224 service items at
+  CATALOG_ONLY, 0 projects/tasks ever created). Built: per-domain delivery
+  blueprints on every service item, start_project_from_service (project +
+  milestones + tasks, AI steps wired), run_ai_task (governed gateway
+  execution -> inline Artifact -> task parks at REVIEW for human verify),
+  admin /admin/projects/new + Run AI buttons + Artifacts section,
+  CLI prepare-service-delivery (stamp + truthful-evidence promotion).
+- Dogfood LIVE on prod: "Aknja Showcase App" (SE, PWA service item) +
+  "Showcase App Launch Marketing" (DM, sales copy item) for the Sanjai
+  client; promoted both items to AVAILABLE_AI_ASSISTED/LIMITED via the
+  8-key evidence path. Real artifacts produced: AI code review (groq,
+  1910 chars) + Malayalam campaign adaptation (indictrans2).
+- THREE more real bugs found by the dogfood and FIXED:
+  (a) settle/release_reservation existed but were NEVER called — every
+      admission since launch left a permanently-RESERVED row until every
+      provider hard-stopped on phantom usage (337 released on prod);
+      llm_complete now settles on success / releases on every failure path.
+  (b) llm-ping carried yesterday's daily usage across UTC midnight
+      (fail-closed a fresh day); snapshot refresh is now date-scoped.
+  (c) the quality-gate conclusive-record window (limit 5) cut off the
+      only good openrouter record behind six incident rows — widened to
+      10; the inconclusive-repair also hit the SQLAlchemy same-object
+      JSONB no-op (reassign a NEW dict).
+- KNOWN TAIL (openrouter): after the ledger fixes its admission still
+  reported hard-stop during the final dogfood round (reserved-sum timing
+  inside a run); its four task lanes (classification/requirements/
+  summarization/qa_review) are PROVEN working — benchmark 68% conclusive
+  record restored + all four passed in the sandbox e2e with real calls
+  earlier the same day. Re-run the dogfood steps after the pool's next
+  fresh window if the hard-stop persists.
