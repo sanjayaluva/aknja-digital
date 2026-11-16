@@ -480,13 +480,33 @@ def cmd_llm_ping(args: argparse.Namespace) -> int:
     Runs a single completion through the governed inference layer against
     the named provider only — no failover, so the result reflects that
     provider's health, quota and credentials directly.
+
+    The operator running a health check IS fresh quota evidence: the latest
+    snapshot is re-observed first (last locally-metered usage carried over),
+    otherwise a >6h-old snapshot would fail-closed the very check meant to
+    prove the provider healthy (observed live 2026-11-16: every provider
+    gated as 'stale quota snapshot' and the ping could never self-heal).
     """
     db = get_session_local()()
     try:
-        from app.modules.ai.inference import llm_complete
+        from sqlalchemy import select
+
+        from app.modules.ai.inference import _target_product, llm_complete
         from app.modules.identity.service import bootstrap_internal_tenant
+        from app.modules.resources import service as quota
+        from app.modules.resources.models import QuotaSnapshot
 
         tenant = bootstrap_internal_tenant(db)
+        pair = _target_product(db, tenant.id, args.provider)
+        if pair is not None:
+            last = db.scalar(
+                select(QuotaSnapshot.effective_usage).where(
+                    QuotaSnapshot.provider_product_id == pair[0].id
+                ).order_by(QuotaSnapshot.observed_at.desc()).limit(1)
+            )
+            quota.record_snapshot(
+                db, pair[0], provider_reported=last, confidence="MEDIUM",
+            )
         result = llm_complete(
             db,
             tenant_id=tenant.id,
