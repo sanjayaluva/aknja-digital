@@ -701,6 +701,17 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
   whatsapp cloud, T-031 voice, T-032 github tooling, T-033 multi-service
   plans (docs/34 §1 table).
 - status: COMPLETED
+### T-028/029 ops notes (live)
+
+- aknja-email.timer installed and RUNNING (5-min cadence; no-op until an
+  ACTIVE EMAIL credential exists). Root cause found while wiring it: the
+  deploy command= wrapper is a fixed copy at /home/ubuntu/aknja-deploy.sh
+  and repo edits to it did not apply — the wrapper now self-syncs from
+  the repo as the last step of every healthy deploy (one manual bootstrap
+  was needed to install the self-syncing version).
+- Prod verified: webhook 404 fail-closed, poll-email no-op summary,
+  telegram-set-webhook exit 1 without an ACTIVE credential, wrapper ==
+  repo, smoke 8/8 (f1125ed).
 
 ## Open items (next rounds)
 
