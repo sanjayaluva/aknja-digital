@@ -110,8 +110,6 @@ def cmd_prepare_service_delivery(args: argparse.Namespace) -> int:
     """
     db = get_session_local()()
     try:
-        from uuid import uuid4
-
         from sqlalchemy import select
 
         from app.core.enums import UserRole
@@ -123,9 +121,21 @@ def cmd_prepare_service_delivery(args: argparse.Namespace) -> int:
         from app.modules.identity.service import Principal, bootstrap_internal_tenant
 
         tenant = bootstrap_internal_tenant(db)
+        # promotion evidence needs a REAL verified_by user (FK); use the
+        # tenant's actual super admin rather than a synthetic id
+        from app.modules.identity.models import User
+
+        admin = db.scalars(
+            select(User).where(
+                User.tenant_id == tenant.id, User.role == UserRole.SUPER_ADMIN
+            ).order_by(User.created_at)
+        ).first()
+        if admin is None:
+            print("ERROR: no super admin user exists for the internal tenant")
+            return 1
         principal = Principal(
-            user_id=uuid4(), email="cli@aknja.local", tenant_id=tenant.id,
-            role=UserRole.SUPER_ADMIN, client_id=None, session_id=uuid4(),
+            user_id=admin.id, email=admin.email, tenant_id=tenant.id,
+            role=UserRole.SUPER_ADMIN, client_id=None, session_id=admin.id,
             csrf_token="",
         )
         stamped = stamp_delivery_templates(db, tenant.id)
