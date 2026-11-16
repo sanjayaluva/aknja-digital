@@ -123,11 +123,13 @@ def cmd_prepare_service_delivery(args: argparse.Namespace) -> int:
         tenant = bootstrap_internal_tenant(db)
         # promotion evidence needs a REAL verified_by user (FK); use the
         # tenant's actual super admin rather than a synthetic id
-        from app.modules.identity.models import User
+        from app.modules.identity.models import TenantMembership, User
 
         admin = db.scalars(
-            select(User).where(
-                User.tenant_id == tenant.id, User.role == UserRole.SUPER_ADMIN
+            select(User).join(TenantMembership, TenantMembership.user_id == User.id)
+            .where(
+                TenantMembership.tenant_id == tenant.id,
+                TenantMembership.role == UserRole.SUPER_ADMIN.value,
             ).order_by(User.created_at)
         ).first()
         if admin is None:
