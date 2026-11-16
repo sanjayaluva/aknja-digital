@@ -608,7 +608,7 @@ def benchmark_gate(db: Session, product_id: uuid.UUID, task: str) -> str | None:
         select(ProviderQualityBenchmark)
         .where(ProviderQualityBenchmark.provider_product_id == product_id)
         .order_by(ProviderQualityBenchmark.evaluated_at.desc())
-        .limit(5)
+        .limit(10)
     ).all()
     row = next((r for r in rows if not (r.score_json or {}).get("inconclusive")), None)
     if row is None or row.passed:
