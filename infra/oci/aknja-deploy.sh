@@ -42,6 +42,15 @@ for i in $(seq 1 15); do
   if curl -sf -m 5 http://127.0.0.1:8000/healthz; then
     echo
     echo "deploy: $SHA live"
+    # self-sync LAST: this wrapper is a fixed copy at /home/ubuntu/aknja-deploy.sh
+    # (command= entrypoint). Overwriting it here — after the running script has
+    # effectively finished — keeps future infra changes (new timers etc.)
+    # effective on the next deploy without another manual copy.
+    if [ -f infra/oci/aknja-deploy.sh ] && ! cmp -s infra/oci/aknja-deploy.sh /home/ubuntu/aknja-deploy.sh; then
+      install -m 750 -o ubuntu -g ubuntu infra/oci/aknja-deploy.sh /home/ubuntu/aknja-deploy.sh.fresh
+      mv /home/ubuntu/aknja-deploy.sh.fresh /home/ubuntu/aknja-deploy.sh
+      echo "deploy: wrapper self-synced to repo version"
+    fi
     exit 0
   fi
   sleep 2
