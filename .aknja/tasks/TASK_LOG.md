@@ -687,6 +687,21 @@ engagement). Status is `COMPLETED` only with recorded verification evidence.
 - prod readiness smoke 8/8: full service-provider lifecycle live.
 - status: COMPLETED — system open for real client testing
 
+## T-027 — credential hub, unified intake, per-product models (docs/34)
+
+- integration_credentials (Fernet, DB-first resolution, env = DR seed),
+  /admin/integrations CRUD + live test (pass = activation gate, fail =
+  ACTIVE->FAILED), intake_messages + /admin/intake (MANUAL channel live,
+  AI classification -> extraction -> lead + telegram notify, verbatim
+  provenance), provider_products.model admin-editable.
+- Live: gemini key hub-managed + ACTIVE; Malayalam WhatsApp intake
+  converted to lead + notified; gemini-3-flash-preview verified as alt
+  (2.5 line retired 404); smoke 8/8; suite 207 green.
+- Phases next: T-028 email poller, T-029 telegram inbound, T-030
+  whatsapp cloud, T-031 voice, T-032 github tooling, T-033 multi-service
+  plans (docs/34 §1 table).
+- status: COMPLETED
+
 ## Open items (next rounds)
 
 - DONE T-024f: gemini re-enabled (gemma-4-26b-a4b-it default) and

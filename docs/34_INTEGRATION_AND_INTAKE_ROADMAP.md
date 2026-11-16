@@ -60,3 +60,36 @@ Operational Workflow") reconciled against docs/01 MASTER SRS and the live system
   `is_paid` products with explicit founder opt-in.
 - No credential ever rendered back to the browser in plaintext (UI shows
   a masked hint only).
+
+## 4. "Why not high-capability Gemini?" — live probe verdict (2026-11-16)
+
+Probed the production key against generativelanguage.googleapis.com:
+
+- **gemini-2.5-flash / gemini-2.5-pro: RETIRED.** They still appear in the
+  models list (26 entries match "2.5+"/"gemini-3"), but generateContent
+  returns 404 "no longer available". No integration path exists.
+- **gemini-3-flash-preview: REAL.** HTTP 200 in 1.2s on a live generation.
+  But a 16-scenario benchmark run hit provider rate limits on 11/16
+  (INCONCLUSIVE) — preview-tier free quota is too thin for a primary lane.
+- Root cause of the original complaint was **hardcoded models** (T-024f
+  fell back to gemma-4-26b-a4b-it after flash-line starvation and the id
+  stayed in code). That is fixed structurally: `provider_products.model`
+  is admin-editable, resolution = explicit arg > product.model > default.
+- **Current policy (set live):** primary stays on the gemma-4 default (it
+  carries the 57% conclusive benchmark evidence); gemini-3-flash-preview
+  is recorded on the product as a verified alt (`alt_model_verified`) for
+  admin switch-over when quota/quality justify a re-benchmark.
+
+## 5. T-027 live verification (production, 2026-11-16)
+
+1. Credential hub: gemini key stored (DRAFT) -> live test 200 -> **ACTIVE**
+   -> `resolve_llm_key` returns the DB value (DB-first confirmed).
+2. Model switch to gemini-3-flash-preview via DB edit (zero code) —
+   confirmed the switch took effect end-to-end (the gate then correctly
+   demanded fresh benchmark evidence — fail-closed works).
+3. Intake live: real Malayalam-mixed WhatsApp message -> governed AI
+   classification (SOFTWARE_ENGINEERING, lang=ml, openrouter) -> Lead
+   created (source=WHATSAPP) -> founder Telegram notification enqueued.
+   Requirements-extraction lane was provider-slow at that moment and
+   fail-closed to empty — visible verbatim on the intake record.
+4. Readiness smoke after deploy: 8/8 green.
