@@ -272,6 +272,56 @@ def test_llm_failover_on_429_to_next_provider(db, seed) -> None:
     _ = switch  # the switch event binds to the provider we failed away from
 
 
+def test_gate_skips_do_not_consume_failover_budget(db, seed) -> None:
+    """Three quality-gated providers ahead of one eligible specialist: the
+    skips must not burn the 3-attempt budget (regression: translation burned
+    its budget on gemini/openrouter/groq gate-skips and never reached the
+    eligible indictrans2 specialist — live 2026-11-16)."""
+    from datetime import timedelta
+
+    from app.core.security import utcnow
+    from app.modules.resources.models import ProviderQualityBenchmark
+
+    register_candidate_providers(db, seed.tenant.id)
+    # three gated providers, verified most recently -> tried FIRST
+    for i, provider in enumerate(("github_models", "groq", "mistral")):
+        product = _verify_provider(db, seed, provider)
+        account = db.query(ProviderAccount).filter(
+            ProviderAccount.provider == provider).one()
+        account.last_verified_at = utcnow() - timedelta(seconds=i + 1)
+        db.add(ProviderQualityBenchmark(
+            provider_product_id=product.id, provider=provider,
+            benchmark_version="v1", tasks=["classification"], languages=["en"],
+            score_json={
+                "per_task": {"classification": {
+                    "score": 0.10, "passed": False, "floor": 0.75}},
+                "overall_score": 0.10,
+            }, evaluated_at=utcnow(),
+        ))
+    # the eligible specialist, verified OLDEST -> last in the pool order
+    _verify_provider(db, seed, "gemini")
+    acct = db.query(ProviderAccount).filter(
+        ProviderAccount.provider == "gemini").one()
+    acct.last_verified_at = utcnow() - timedelta(seconds=30)
+    db.commit()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "generativelanguage.googleapis.com"
+        return httpx.Response(
+            200, json={"candidates": [{"content": {"parts": [
+                {"text": "PONG from gemini"}]}}]}
+        )
+
+    result = llm_complete(
+        db, tenant_id=seed.tenant.id, task="classification", prompt="ping",
+        settings=_settings(), http_client=_mock_client(handler),
+    )
+    assert result.status == "SUCCEEDED"
+    assert result.provider == "gemini"
+    skipped = [a for a in result.attempts if a["status"] == "SKIPPED"]
+    assert len(skipped) == 3  # all three gated providers were evaluated first
+
+
 def test_llm_ping_denies_unverified_target(db, seed) -> None:
     register_candidate_providers(db, seed.tenant.id)
     db.commit()

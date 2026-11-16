@@ -479,6 +479,12 @@ def llm_complete(
                 exclude.append(product.id)
                 if decision.reservation_id:
                     release_reservation(db, decision.reservation_id)
+                # an eligibility skip is not a delivery attempt: gate-skipped
+                # providers must not consume the failover budget, or the
+                # eligible specialist at the end of a 4-provider pool never
+                # gets its turn (live 2026-11-16: translation burned 3 skips
+                # on gemini/openrouter/groq and never reached indictrans2)
+                attempts_left += 1
                 continue
             adapter = ADAPTERS.get(account.provider)
             api_key = _provider_key(account.provider, settings)
@@ -497,6 +503,7 @@ def llm_complete(
                 exclude.append(product.id)
                 if decision.reservation_id:
                     release_reservation(db, decision.reservation_id)
+                attempts_left += 1  # not a delivery attempt either
                 continue
 
             resolved_model = model or _default_model(account.provider)
