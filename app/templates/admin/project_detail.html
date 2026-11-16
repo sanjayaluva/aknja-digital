@@ -2,10 +2,19 @@
 {% block title %}{{ project.name }} — {{ app_name }}{% endblock %}
 {% block content %}
 <div class="page">
+  {% if request.query_params.get('started') %}
+  <div class="alert alert-ok">Project started from the catalog — milestones, tasks and AI steps are instantiated. Run the AI steps from the task list below.</div>
+  {% endif %}
+  {% set ai_msg = request.query_params.get('ai') %}
+  {% if ai_msg == 'SUCCEEDED' %}
+  <div class="alert alert-ok">AI step completed — the output is registered in the Artifacts section below and the task is waiting for human review.</div>
+  {% elif ai_msg %}
+  <div class="alert alert-err">AI step outcome: {{ ai_msg }} — the task parks for human delivery (fail-closed, never a silent degrade).</div>
+  {% endif %}
   <header class="page-head">
     <div>
       <h1>{{ project.name }}</h1>
-      <p class="muted">{{ project.lifecycle_state }} · {{ project.hosting_mode }} · progress {{ progress.pct }}%</p>
+      <p class="muted">{{ project.lifecycle_state }} · {{ project.hosting_mode }} · progress {{ progress.pct }}%{% if service %} · {{ service.name }}{% endif %}</p>
     </div>
     <form method="post" action="/admin/projects/{{ project.id }}/transition" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
@@ -77,13 +86,24 @@
     </form>
     {% if tasks %}
     <table class="table">
-      <thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Move</th></tr></thead>
+      <thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>AI step</th><th>Move</th></tr></thead>
       <tbody>
       {% for t in tasks %}
       <tr>
         <td>{{ t.title }}</td>
         <td><span class="tag tag-{{ 'ok' if t.status in ('DONE','VERIFIED') else 'work' }}">{{ t.status }}</span></td>
         <td>{{ t.priority }}</td>
+        <td>
+          {% if t.ai_task %}
+            <span class="tag tag-warn">{{ t.ai_task }}</span>
+            {% if t.status not in ('DONE', 'CANCELLED') %}
+            <form method="post" action="/admin/projects/{{ project.id }}/tasks/{{ t.id }}/run-ai" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+              <button class="btn btn-sm" type="submit">Run AI</button>
+            </form>
+            {% endif %}
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
         <td>
           {% set task_map = {'BACKLOG': ['SPECIFIED','CANCELLED'], 'SPECIFIED': ['IN_PROGRESS','CANCELLED'], 'IN_PROGRESS': ['REVIEW','BLOCKED','CANCELLED'], 'BLOCKED': ['IN_PROGRESS','CANCELLED'], 'REVIEW': ['VERIFIED','IN_PROGRESS'], 'VERIFIED': ['DONE']} %}
           {% if task_map.get(t.status) %}
@@ -130,5 +150,23 @@
       {% else %}<p class="empty">No UAT records yet.</p>{% endif %}
     </section>
   </div>
+
+  <section class="card">
+    <h2>Artifacts</h2>
+    {% if artifacts %}
+    <table class="table">
+      <thead><tr><th>Title</th><th>Kind</th><th>Content</th></tr></thead>
+      <tbody>
+      {% for a in artifacts %}
+      <tr>
+        <td>{{ a.title }}</td>
+        <td><span class="tag">{{ a.kind }}</span></td>
+        <td class="mono" style="white-space: pre-wrap; max-width: 560px;">{{ (a.content or a.storage_key)[:400] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="empty">No artifacts yet — run an AI task or upload deliverables.</p>{% endif %}
+  </section>
 </div>
 {% endblock %}

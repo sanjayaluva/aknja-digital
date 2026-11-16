@@ -344,3 +344,75 @@ def login(page, base_url: str, email: str, password: str) -> None:
     assert last_error is not None
     print(f"[login failed] final page content:\n{page.content()[:2000]}")
     raise last_error
+
+
+@pytest.fixture(scope="module")
+def ai_ready(server_url):
+    """Enable the sandbox-reachable free providers through the governance path.
+
+    Only providers whose API key is actually configured are enabled — an
+    enabled-but-keyless product would poison the pool with SKIPPED attempts.
+    Shared by the AI-workflow and service-delivery e2e modules.
+    """
+    from sqlalchemy.orm import Session
+
+    from app.core.config import get_settings
+    from app.core.db import get_engine
+    from app.core.enums import BillingState
+    from app.core.security import utcnow
+    from app.modules.resources.models import ProviderAccount, ProviderProduct
+    from app.modules.resources.service import record_snapshot
+
+    settings = get_settings()
+    keyed = {
+        "openrouter": bool(settings.openrouter_api_key),
+        "github_models": bool(settings.github_models_token),
+    }
+    with Session(get_engine()) as db:
+        enabled = []
+        for provider, has_key in keyed.items():
+            if not has_key:
+                continue
+            account = db.query(ProviderAccount).filter(
+                ProviderAccount.provider == provider
+            ).first()
+            if account is None:
+                continue
+            product = db.query(ProviderProduct).filter(
+                ProviderProduct.account_id == account.id
+            ).first()
+            account.billing_state = BillingState.FREE_VERIFIED.value
+            account.enabled = True
+            account.last_verified_at = utcnow()
+            product.allowance = 1000
+            product.enabled = True
+            record_snapshot(db, product, locally_metered=0)
+            enabled.append(provider)
+        db.commit()
+    assert enabled, "no sandbox-reachable keyed provider could be enabled"
+    return enabled
+
+
+@pytest.fixture(scope="module")
+def catalog_ready(server_url):
+    """Import the full service taxonomy and stamp delivery templates (T-026)."""
+    from pathlib import Path
+
+    from sqlalchemy.orm import Session
+
+    from app.core.db import get_engine
+    from app.modules.catalog import service as catalog
+    from app.modules.identity.service import bootstrap_internal_tenant
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    with Session(get_engine()) as db:
+        tenant = bootstrap_internal_tenant(db)
+        catalog.import_taxonomy(
+            db, tenant_id=tenant.id,
+            md_path=repo_root / "docs" / "source_service_hierarchy.md",
+            seed_csv_path=repo_root / "examples" / "service-readiness-seed.csv",
+        )
+        stamped = catalog.stamp_delivery_templates(db, tenant.id)
+        db.commit()
+    assert stamped == 224
+    return stamped

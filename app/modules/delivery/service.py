@@ -88,6 +88,7 @@ def create_project(
     description: str = "",
     hosting_mode: str = HostingMode.CLIENT_OWNED.value,
     contract_id: uuid.UUID | None = None,
+    service_id: uuid.UUID | None = None,
 ) -> Project:
     from app.modules.crm.service import get_client
 
@@ -96,6 +97,7 @@ def create_project(
         tenant_id=principal.tenant_id,
         client_id=client.id,
         contract_id=contract_id,
+        service_id=service_id,
         name=name,
         slug=generate_token("")[:10],
         description=description,
@@ -280,6 +282,150 @@ def transition_task(
     return task
 
 
+# --- catalog -> delivery flow (T-026) --------------------------------------------
+
+
+def start_project_from_service(
+    db: Session,
+    *,
+    principal: Principal,
+    client_id: uuid.UUID,
+    service_id: uuid.UUID,
+    name: str,
+    brief: str,
+) -> Project:
+    """Instantiate a delivery project from a catalog service item.
+
+    Creates the project linked to the service, then stamps the service's
+    delivery template as milestones + tasks (AI steps wired to their governed
+    task profiles). The client brief is stored as the project description —
+    it is the working input for every AI task on the project.
+    """
+    from app.modules.catalog.service import get_service
+
+    service = get_service(db, principal.tenant_id, service_id)
+    template = service.delivery_template
+    if not template or not template.get("milestones"):
+        raise ConflictError(
+            "Service item has no delivery template — run stamp-delivery-templates first",
+            details={"service": service.name},
+        )
+    brief = brief.strip() or f"Delivery of {service.name}."
+    project = create_project(
+        db, principal=principal, client_id=client_id,
+        name=name.strip() or service.name, description=brief,
+        service_id=service.id,
+    )
+    for sort_order, ms in enumerate(template["milestones"], start=1):
+        milestone = add_milestone(
+            db, tenant_id=principal.tenant_id, project_id=project.id,
+            title=ms["title"], weight_pct=ms.get("weight_pct", 0),
+        )
+        for t in ms.get("tasks", []):
+            create_task(
+                db, tenant_id=principal.tenant_id, project_id=project.id,
+                milestone_id=milestone.id, title=t["title"],
+                description=t.get("description", ""),
+                idempotency_key=f"svc-{service.id}-m{sort_order}-{t['title'][:40]}",
+            )
+            # wire the AI profile AFTER create_task (it is not a create param)
+            task = db.scalar(
+                select(Task).where(
+                    Task.tenant_id == principal.tenant_id,
+                    Task.project_id == project.id,
+                    Task.title == t["title"],
+                    Task.milestone_id == milestone.id,
+                )
+            )
+            task.ai_task = t.get("ai_task") or None
+    db.flush()
+    return project
+
+
+# per-profile instruction shapes for AI delivery tasks (T-026); these follow
+# the benchmark instruction style the free-provider pool handles reliably.
+_AI_TASK_INSTRUCTIONS: dict[str, str] = {
+    "requirements": "Extract the functional requirements from the client brief below "
+    'as a JSON array of {"id", "requirement", "priority"}. Output only the JSON.\n\nBrief: ',
+    "code_review": 'Review the code or technical approach described below and output '
+    'JSON {"findings": [{"severity", "comment"}]}. Output only the JSON.\n\nContext: ',
+    "qa_review": 'QA-review the delivery described below and output JSON '
+    '{"verdict": "PASS|FAIL", "checks": ["..."]}. Output only the JSON.\n\nDelivery: ',
+    "classification": "Classify each item in the client brief below into one category: "
+    'BILLING, TECHNICAL, SCHEDULE, OTHER. Output strict JSON {"label": "CATEGORY"} '
+    "for the primary item.\n\nItems: ",
+    "summarization": "Summarize the client brief below in at most 80 words. Keep the "
+    "key facts, audience and dates. Output only the summary.\n\nBrief: ",
+    "translation": "Translate the text below into professional English. Render brand "
+    "names in Latin script exactly. Output only the translation.\n\nText: ",
+}
+
+
+def run_ai_task(
+    db: Session,
+    *,
+    principal: Principal,
+    task_id: uuid.UUID,
+) -> tuple[Task, Artifact | None, str]:
+    """Execute a task's governed AI step and register the output as an artifact.
+
+    Returns (task, artifact, outcome) where outcome is SUCCEEDED | PENDING_MANUAL |
+    FAILED — a PENDING_MANUAL (no free provider above the quality floor) is a
+    governed outcome, not an error: the task parks at REVIEW with the reason
+    attached, ready for human delivery.
+    """
+    from app.modules.ai.gateway import ToolGateway
+
+    task = db.get(Task, task_id)
+    if task is None or task.tenant_id != principal.tenant_id:
+        raise NotFoundError("Task not found")
+    if not task.ai_task:
+        raise ConflictError("Task has no AI step", details={"task": task.title})
+    project = db.get(Project, task.project_id)
+    instruction = _AI_TASK_INSTRUCTIONS.get(task.ai_task)
+    if instruction is None:
+        raise ConflictError(f"No instruction shape for task profile '{task.ai_task}'")
+
+    prompt = f"{instruction}{project.description}"
+    gateway = ToolGateway(db)
+    execution = gateway.execute_tool(
+        principal=principal,
+        tool_name="llm.generate",
+        arguments={
+            "task": task.ai_task,
+            "prompt": prompt,
+            "data_classification": "INTERNAL",
+        },
+        idempotency_key=f"ai-task:{task.id}:{TaskStatus(task.status).value}",
+    )
+    outcome = (execution.result or {}).get("status") or execution.status
+
+    # walk the legal state machine up to REVIEW: the AI produced the draft,
+    # a human verifies (REVIEW → VERIFIED → DONE) — never auto-DONE.
+    current = TaskStatus(task.status)
+    for nxt in (TaskStatus.SPECIFIED, TaskStatus.IN_PROGRESS, TaskStatus.REVIEW):
+        if current in (nxt,):
+            break
+        if nxt in TASK_TRANSITIONS.get(current, set()):
+            transition_task(db, tenant_id=principal.tenant_id, task_id=task.id,
+                            to_status=nxt)
+            current = nxt
+
+    if execution.status == "SUCCEEDED" and outcome == "SUCCEEDED":
+        text = (execution.result.get("text") or "").strip()
+        artifact = register_artifact(
+            db, tenant_id=principal.tenant_id, project_id=project.id,
+            title=f"[AI] {task.title}",
+            kind="DOCUMENT", content=text,
+            content_type="text/plain", size_bytes=len(text.encode()),
+            uploaded_by=principal.user_id,
+        )
+        return task, artifact, "SUCCEEDED"
+
+    reason = (execution.result or {}).get("reason") or execution.error or outcome
+    return task, None, f"{outcome}: {reason}"[:400]
+
+
 def create_staging_preview(
     db: Session,
     *,
@@ -395,6 +541,7 @@ def register_artifact(
     size_bytes: int = 0,
     checksum: str = "",
     uploaded_by: uuid.UUID | None = None,
+    content: str | None = None,
 ) -> Artifact:
     project = get_project(db, tenant_id, project_id)
     artifact = Artifact(
@@ -407,6 +554,7 @@ def register_artifact(
         size_bytes=size_bytes,
         checksum=checksum,
         uploaded_by=uploaded_by,
+        content=content,
     )
     db.add(artifact)
     db.flush()

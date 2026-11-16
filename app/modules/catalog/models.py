@@ -97,6 +97,10 @@ class Service(Base, TimestampMixin):
     data_classification: Mapped[str] = mapped_column(String(32), nullable=False, default="INTERNAL")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sellable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Catalog -> delivery blueprint (T-026): milestones + tasks instantiated
+    # when a project is started from this service item. JSONB shape:
+    # {"milestones": [{"title", "weight_pct", "tasks": [{"title", "ai_task"?}]}]}
+    delivery_template: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
 
     subcategory: Mapped[ServiceSubcategory] = relationship(back_populates="services")
     blueprints: Mapped[list[ServiceBlueprint]] = relationship(back_populates="service")

@@ -100,6 +100,69 @@ def cmd_import_taxonomy(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_prepare_service_delivery(args: argparse.Namespace) -> int:
+    """Stamp delivery blueprints on every catalog service (T-026).
+
+    Optionally promote named services to AVAILABLE_AI_ASSISTED / LIMITED with
+    the six readiness evidence keys recorded as verified — the source note
+    must state what was actually verified (tool access, blueprint, RBAC,
+    privacy gates, quota, quality floors).
+    """
+    db = get_session_local()()
+    try:
+        from uuid import uuid4
+
+        from sqlalchemy import select
+
+        from app.core.enums import UserRole
+        from app.modules.catalog.models import Service
+        from app.modules.catalog.service import (
+            promote_deliverable_service,
+            stamp_delivery_templates,
+        )
+        from app.modules.identity.service import Principal, bootstrap_internal_tenant
+
+        tenant = bootstrap_internal_tenant(db)
+        principal = Principal(
+            user_id=uuid4(), email="cli@aknja.local", tenant_id=tenant.id,
+            role=UserRole.SUPER_ADMIN, client_id=None, session_id=uuid4(),
+            csrf_token="",
+        )
+        stamped = stamp_delivery_templates(db, tenant.id)
+        db.commit()
+        print(f"OK delivery templates stamped on {stamped} service items")
+        if args.promote:
+            if not args.note:
+                print("ERROR: --promote requires a truthful --note for the evidence record")
+                return 1
+            for name in [n.strip() for n in args.promote.split(",") if n.strip()]:
+                matches = db.scalars(
+                    select(Service).where(
+                        Service.tenant_id == tenant.id, Service.name == name
+                    )
+                ).all()
+                if not matches:
+                    print(f"ERROR: no service named {name!r}")
+                    return 1
+                if len(matches) > 1:
+                    print(f"ERROR: service name {name!r} is ambiguous")
+                    return 1
+                service = promote_deliverable_service(
+                    db, principal=principal, service_id=matches[0].id,
+                    source_note=args.note,
+                )
+                db.commit()
+                print(f"OK promoted {service.name!r}: {service.availability} / "
+                      f"{service.readiness} / {service.execution_mode}")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def cmd_seed(_args: argparse.Namespace) -> int:
     db = get_session_local()()
     try:
@@ -878,6 +941,14 @@ def main(argv: list[str] | None = None) -> int:
     p_tax = sub.add_parser("import-taxonomy", help="import source service taxonomy")
     p_tax.add_argument("--md", default=None)
     p_tax.add_argument("--csv", default=None)
+    p_deliv = sub.add_parser(
+        "prepare-service-delivery",
+        help="stamp delivery blueprints on catalog services; optionally promote named items (T-026)",
+    )
+    p_deliv.add_argument("--promote", default=None,
+                         help="comma-separated exact service names to promote to AVAILABLE_AI_ASSISTED/LIMITED")
+    p_deliv.add_argument("--note", default=None,
+                         help="truthful source note recorded on the promotion evidence (required with --promote)")
     sub.add_parser("seed", help="seed settings, capabilities and tools")
     sub.add_parser("verify-install", help="verify installation evidence")
     sub.add_parser("demo-seed", help="create labelled synthetic demo data (never in production)")
@@ -967,6 +1038,7 @@ def main(argv: list[str] | None = None) -> int:
         "init-db": cmd_init_db,
         "create-super-admin": cmd_create_super_admin,
         "import-taxonomy": cmd_import_taxonomy,
+        "prepare-service-delivery": cmd_prepare_service_delivery,
         "seed": cmd_seed,
         "verify-install": cmd_verify_install,
         "demo-seed": cmd_demo_seed,

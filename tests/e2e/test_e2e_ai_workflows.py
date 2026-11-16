@@ -28,63 +28,11 @@ from tests.e2e.conftest import (
 
 pytestmark = pytest.mark.e2e
 
-# providers verified reachable from the dev sandbox network (T-024/T-025);
-# the pool fails over between them if one throttles.
-E2E_PROVIDERS = ("openrouter", "github_models")
-
 # Free-tier pools burst-throttle (openrouter :free answers 429s when calls
 # arrive back-to-back — live 2026-11-15); pace the workflow and allow a
 # governed-retry pause instead of failing the suite on a transient 429.
 _CALL_PACE_S = 6.0
-_RETRY_PAUSE_S = 15.0
-
-
-@pytest.fixture(scope="module")
-def ai_ready(server_url):
-    """Enable the sandbox-reachable free providers through the governance path.
-
-    Only providers whose API key is actually configured are enabled — an
-    enabled-but-keyless product would poison the pool with SKIPPED attempts.
-    """
-    from sqlalchemy.orm import Session
-
-    from app.core.config import get_settings
-    from app.core.db import get_engine
-    from app.core.enums import BillingState
-    from app.core.security import utcnow
-    from app.modules.resources.models import ProviderAccount, ProviderProduct
-    from app.modules.resources.service import record_snapshot
-
-    settings = get_settings()
-    keyed = {
-        "openrouter": bool(settings.openrouter_api_key),
-        "github_models": bool(settings.github_models_token),
-    }
-    with Session(get_engine()) as db:
-        enabled = []
-        for provider in E2E_PROVIDERS:
-            if not keyed[provider]:
-                continue
-            account = db.query(ProviderAccount).filter(
-                ProviderAccount.provider == provider
-            ).first()
-            if account is None:
-                continue  # candidate not registered in this environment
-            product = db.query(ProviderProduct).filter(
-                ProviderProduct.account_id == account.id
-            ).first()
-            # mirror the verify-provider governance path (admit_usage checks
-            # account.billing_state + account.enabled + product.enabled)
-            account.billing_state = BillingState.FREE_VERIFIED.value
-            account.enabled = True
-            account.last_verified_at = utcnow()
-            product.allowance = 1000
-            product.enabled = True
-            record_snapshot(db, product, locally_metered=0)
-            enabled.append(provider)
-        db.commit()
-    assert enabled, "no sandbox-reachable keyed provider could be enabled"
-    return enabled
+_RETRY_PAUSE_S = 20.0
 
 
 def _csrf_from_page(page) -> str:
@@ -104,7 +52,7 @@ def _run_tool(page, server_url: str, task: str, prompt: str) -> dict:
     import time
 
     last: dict = {}
-    for attempt in range(3):
+    for attempt in range(4):
         if attempt:
             time.sleep(_RETRY_PAUSE_S)
         resp = page.request.post(

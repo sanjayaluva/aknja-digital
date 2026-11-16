@@ -66,6 +66,11 @@ class Project(Base, TimestampMixin):
     warranty_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     artifact_prefix: Mapped[str] = mapped_column(Text, nullable=False, default="")
     environment_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # the catalog service item this project delivers (T-026; nullable for
+    # free-form projects created before the catalog-delivery link)
+    service_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("services.id"), nullable=True
+    )
 
     milestones: Mapped[list[Milestone]] = relationship(
         back_populates="project", order_by="Milestone.sort_order"
@@ -143,6 +148,9 @@ class Task(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(32), default=TaskStatus.BACKLOG.value, nullable=False)
     priority: Mapped[str] = mapped_column(String(16), nullable=False, default="MEDIUM")
+    # governed AI task profile this task can execute (T-026): when set,
+    # "Run AI" routes through the ToolGateway llm.generate tool
+    ai_task: Mapped[str | None] = mapped_column(String(32), nullable=True)
     assignee_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -191,6 +199,9 @@ class Artifact(Base, TimestampMixin):
     storage_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
     checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # inline content for AI-generated artifacts (T-026): no object storage
+    # round-trip for text deliverables; storage_key stays empty for inline
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     classification: Mapped[str] = mapped_column(
         String(32), default=DataClassification.INTERNAL.value, nullable=False
     )

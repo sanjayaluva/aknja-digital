@@ -7,6 +7,7 @@ loading/empty/error states through the shared partials.
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -321,6 +322,43 @@ def projects_page(request: Request):
         db.close()
 
 
+@router.get("/projects/new", response_class=HTMLResponse)
+def project_new(request: Request):
+    """Start a delivery project from a catalog service item (T-026)."""
+    principal, redirect = guard(request, write=True)
+    if redirect:
+        return redirect
+    db = db_session()
+    try:
+        from sqlalchemy import select
+
+        from app.modules.catalog.models import Service, ServiceSubcategory
+        from app.modules.crm.models import Client
+
+        clients = db.scalars(
+            select(Client).where(Client.tenant_id == principal.tenant_id)
+            .order_by(Client.display_name)
+        ).all()
+        service_rows = db.execute(
+            select(Service, ServiceSubcategory)
+            .join(ServiceSubcategory, Service.subcategory_id == ServiceSubcategory.id)
+            .where(Service.tenant_id == principal.tenant_id,
+                   Service.delivery_template.isnot(None))
+            .order_by(ServiceSubcategory.category_id, Service.sort_order)
+        ).all()
+        # group by domain for the select optgroups
+        grouped: dict[str, list] = {}
+        for service, sub in service_rows:
+            grouped.setdefault(sub.category.domain, []).append((service, sub))
+        return render(request, "admin/project_new.html", {
+            "clients": clients,
+            "grouped_services": grouped,
+            "csrf_token": principal.csrf_token,
+        })
+    finally:
+        db.close()
+
+
 @router.get("/projects/{project_id}", response_class=HTMLResponse)
 def project_detail(request: Request, project_id: uuid.UUID):
     principal, redirect = guard(request)
@@ -330,8 +368,10 @@ def project_detail(request: Request, project_id: uuid.UUID):
     try:
         from sqlalchemy import select
 
+        from app.modules.catalog.models import Service
         from app.modules.delivery import service as delivery
         from app.modules.delivery.models import (
+            Artifact,
             Feedback,
             Milestone,
             StagingPreview,
@@ -355,11 +395,18 @@ def project_detail(request: Request, project_id: uuid.UUID):
         uat = db.scalars(
             select(UATAcceptance).where(UATAcceptance.project_id == project.id)
         ).all()
+        artifacts = db.scalars(
+            select(Artifact).where(Artifact.project_id == project.id)
+            .order_by(Artifact.created_at.desc())
+        ).all()
+        service = db.get(Service, project.service_id) if project.service_id else None
         return render(
             request,
             "admin/project_detail.html",
             {
                 "project": project,
+                "service": service,
+                "artifacts": artifacts,
                 "milestones": milestones,
                 "tasks": tasks,
                 "previews": previews,
@@ -370,6 +417,70 @@ def project_detail(request: Request, project_id: uuid.UUID):
                 "task_statuses": list(TaskStatus),
             },
         )
+    finally:
+        db.close()
+
+
+@router.post("/projects/new", response_class=HTMLResponse)
+def project_start(
+    request: Request,
+    client_id: Annotated[uuid.UUID, Form(...)],
+    service_id: Annotated[uuid.UUID, Form(...)],
+    name: str = Form(...),
+    brief: str = Form(""),
+    csrf_token: str = Form(...),
+):
+    principal, redirect = guard(request, write=True)
+    if redirect:
+        return redirect
+    err = csrf_guard(request, principal, csrf_token)
+    if err:
+        return err
+    db = db_session()
+    try:
+        from app.modules.delivery import service as delivery
+
+        project = delivery.start_project_from_service(
+            db, principal=principal, client_id=client_id,
+            service_id=service_id, name=name, brief=brief,
+        )
+        db.commit()
+        return RedirectResponse(f"/admin/projects/{project.id}?started=1", status_code=303)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/run-ai", response_class=HTMLResponse)
+def project_task_run_ai(
+    request: Request, project_id: uuid.UUID, task_id: uuid.UUID,
+    csrf_token: str = Form(...),
+):
+    """Execute a task's governed AI step; the output lands as a project artifact."""
+    principal, redirect = guard(request, write=True)
+    if redirect:
+        return redirect
+    err = csrf_guard(request, principal, csrf_token)
+    if err:
+        return err
+    db = db_session()
+    try:
+        from urllib.parse import quote
+
+        from app.modules.delivery import service as delivery
+
+        _, artifact, outcome = delivery.run_ai_task(
+            db, principal=principal, task_id=task_id,
+        )
+        db.commit()
+        suffix = f"ai=SUCCEEDED&ai_artifact={quote(artifact.title)}" if artifact \
+            else f"ai={quote(outcome[:120])}"
+        return RedirectResponse(f"/admin/projects/{project_id}?{suffix}", status_code=303)
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

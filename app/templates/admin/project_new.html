@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Start project — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Start a delivery project</h1>
+      <p class="muted">Pick the client and a catalog service item — the service's delivery
+        blueprint (milestones, tasks, AI steps) is instantiated automatically.</p></div>
+  </header>
+
+  <section class="card">
+    <form method="post" action="/admin/projects/new" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Client
+        <select name="client_id" required>
+          {% for c in clients %}<option value="{{ c.id }}">{{ c.display_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Service item (from the catalog)
+        <select name="service_id" required>
+          {% for domain, items in grouped_services.items() %}
+          <optgroup label="{{ 'Software Engineering' if domain == 'SOFTWARE_ENGINEERING' else 'Digital Marketing' }}">
+            {% for service, sub in items %}
+            <option value="{{ service.id }}">{{ sub.name }} — {{ service.name }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Project name <input name="name" required minlength="3" placeholder="Showcase App"></label>
+      <label>Client brief (the working input for every AI step on this project)
+        <textarea name="brief" rows="5" placeholder="What should be delivered, for whom, key dates…"></textarea>
+      </label>
+      <button type="submit">Start project</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
