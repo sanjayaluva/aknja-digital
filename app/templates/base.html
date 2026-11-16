@@ -22,6 +22,7 @@
     <nav>
       <div class="nav-group">Operations</div>
       <a href="/admin" class="{{ 'active' if request.url.path == '/admin' else '' }}">Overview</a>
+      <a href="/admin/intake" class="{{ 'active' if '/intake' in request.url.path else '' }}">Intake</a>
       <a href="/admin/leads" class="{{ 'active' if '/leads' in request.url.path else '' }}">Leads</a>
       <a href="/admin/clients" class="{{ 'active' if '/clients' in request.url.path else '' }}">Clients</a>
       <a href="/admin/catalog" class="{{ 'active' if '/catalog' in request.url.path else '' }}">Service Catalog</a>
@@ -32,6 +33,7 @@
       <div class="nav-group">System Control</div>
       <a href="/admin/ai" class="{{ 'active' if request.url.path == '/admin/ai' else '' }}">AI Orchestrator</a>
       <a href="/admin/providers" class="{{ 'active' if '/providers' in request.url.path else '' }}">Providers &amp; Quota</a>
+      <a href="/admin/integrations" class="{{ 'active' if '/integrations' in request.url.path else '' }}">Integrations</a>
       <a href="/admin/settings" class="{{ 'active' if '/settings' in request.url.path else '' }}">Settings</a>
       <a href="/admin/audit" class="{{ 'active' if '/audit' in request.url.path else '' }}">Audit</a>
       <a href="/admin/incidents" class="{{ 'active' if '/incidents' in request.url.path else '' }}">Incidents</a>

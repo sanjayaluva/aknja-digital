@@ -317,19 +317,17 @@ ADAPTERS = {
 }
 
 
-def _provider_key(provider: str, settings: Settings) -> str:
-    """First key of a comma-separated key pool (SRS GEMINI_API_KEYS=key1,key2)."""
-    raw = {
-        "groq": settings.groq_api_keys,
-        "gemini": settings.gemini_api_keys,
-        "github_models": settings.github_models_token,
-        "cloudflare_workers_ai": settings.cloudflare_api_token,
-        "openrouter": settings.openrouter_api_key,
-        "mistral": settings.mistral_api_key,
-        "indictrans2": settings.indictrans2_api_key,
-    }.get(provider)
-    secret = raw.get_secret_value() if raw is not None else ""
-    return secret.split(",")[0].strip() if secret else ""
+def _provider_key(db: Session, tenant_id: uuid.UUID, provider: str,
+                  settings: Settings) -> str:
+    """Resolve the provider key DB-first, env fallback (docs/34 §2.1).
+
+    The admin-managed credential hub (integration_credentials, ACTIVE rows
+    only) is the primary store; env vars remain as the disaster-recovery
+    seed so a wiped DB can still boot.
+    """
+    from app.modules.integrations import service as integrations
+
+    return integrations.resolve_llm_key(db, tenant_id, provider, settings)
 
 
 def _log_call(
@@ -489,7 +487,7 @@ def llm_complete(
                     attempts_left += 1
                 continue
             adapter = ADAPTERS.get(account.provider)
-            api_key = _provider_key(account.provider, settings)
+            api_key = _provider_key(db, tenant_id, account.provider, settings)
             if adapter is None or not api_key:
                 reason = (
                     f"no HTTP adapter for '{account.provider}'"
@@ -509,7 +507,13 @@ def llm_complete(
                     attempts_left += 1  # not a delivery attempt either
                 continue
 
-            resolved_model = model or _default_model(account.provider)
+            # model precedence: explicit arg > admin-set product model
+            # (provider_products.model, docs/34 §2.4 — switching gemini to a
+            # high-capability model is a DB edit, not a code change) >
+            # built-in default per provider
+            resolved_model = (
+                model or product.model or _default_model(account.provider)
+            )
             started = time.monotonic()
             try:
                 text = adapter(prompt, model or "", api_key, settings, client)

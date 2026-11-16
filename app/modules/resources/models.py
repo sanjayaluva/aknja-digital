@@ -81,6 +81,10 @@ class ProviderProduct(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("provider_accounts.id"), nullable=False
     )
     product_key: Mapped[str] = mapped_column(Text, nullable=False)  # e.g. "gemini-2.5-flash tokens/day"
+    # admin-editable model id used by llm_complete (docs/34 §2.4): empty =
+    # built-in default per provider; set to switch a provider to another
+    # model without a code change
+    model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     category: Mapped[str] = mapped_column(String(32), nullable=False)  # ProviderCategory
     capability_contract: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     metric_key: Mapped[str] = mapped_column(String(64), nullable=False, default="requests")

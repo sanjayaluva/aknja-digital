@@ -42,6 +42,16 @@ TELEGRAM_API = "https://api.telegram.org"
 
 # template_key -> language -> body with {field} placeholders.
 TEMPLATES: dict[str, dict[str, str]] = {
+    "intake.received": {
+        "ml": ("പുതിയ പ്രോജക്റ്റ് അന്വേഷണം ({channel})\n"
+               "ആയിരിക്കുന്നയാൾ: {sender}\n"
+               "സംഗ്രഹം: {summary}\n"
+               "ലീഡ് സൃഷ്ടിച്ചു: {lead_title}"),
+        "en": ("New project inquiry ({channel})\n"
+               "From: {sender}\n"
+               "Summary: {summary}\n"
+               "Lead created: {lead_title}"),
+    },
     "approval.requested": {
         "ml": ("അംഗീകാരം ആവശ്യമാണ്: {title}\n"
                "ഗേറ്റ്: {gate}\nകാലഹരിപ്പ്: {expires_at}\nനോൺസ്: {nonce}"),
@@ -248,7 +258,17 @@ def process_outbox(
     PENDING with attempts 0 and are counted as `unconfigured`.
     """
     cfg = settings or get_settings()
-    token = cfg.telegram_bot_token.get_secret_value()
+    # DB-first credential hub (docs/34 §2.1): an ACTIVE telegram_bot row
+    # overrides the env seed; resolved per notification row (tenant-scoped)
+    from app.modules.integrations import service as integrations
+
+    def _token_for(tenant_id: uuid.UUID | None) -> str:
+        if tenant_id is not None:
+            secrets = integrations.resolve_secrets(db, tenant_id, "telegram_bot")
+            if secrets and secrets.get("bot_token"):
+                return secrets["bot_token"]
+        return cfg.telegram_bot_token.get_secret_value()
+
     chat_id = cfg.telegram_admin_chat_id
     moment = now or utcnow()
     due = list(
@@ -268,6 +288,7 @@ def process_outbox(
         for row in due:
             if row.next_attempt_at is not None and row.next_attempt_at > moment:
                 continue  # not due yet (backoff window)
+            token = _token_for(row.tenant_id)
             if not token or not (row.recipient or chat_id):
                 summary["unconfigured"] += 1
                 continue

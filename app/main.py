@@ -148,11 +148,13 @@ def create_app() -> FastAPI:
     app.state.templates = templates
 
     from app.ui.admin import router as admin_router
+    from app.ui.admin_integrations import router as admin_integrations_router
     from app.ui.portal import router as portal_router
     from app.ui.views import router as ui_router
 
     app.include_router(ui_router)
     app.include_router(admin_router)
+    app.include_router(admin_integrations_router)
     app.include_router(portal_router)
 
     return app

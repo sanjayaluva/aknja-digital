@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Integrations — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Service Integrations &amp; Credentials</h1>
+      <p class="muted">Admin-managed credential hub (docs/34). Secrets are Fernet-encrypted in the database —
+        adding or rotating a key never touches source code or .env. A passing live test is the activation gate;
+        resolution prefers ACTIVE rows over the env seed.</p></div>
+    {% if flash %}<div class="alert {{ 'alert-ok' if flash_ok else 'alert-danger' }}">{{ flash }}</div>{% endif %}
+  </header>
+
+  <section class="card">
+    <h2>Configured integrations</h2>
+    {% if creds %}
+    <table class="table">
+      <thead><tr><th>Provider</th><th>Type</th><th>Secret</th><th>Status</th><th>Last test</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for c in creds %}
+      <tr>
+        <td><strong>{{ c.provider_key }}</strong>{% if c.name and c.name != c.provider_key %}<br><span class="muted">{{ c.name }}</span>{% endif %}</td>
+        <td>{{ c.provider_type }}</td>
+        <td class="muted">{{ hints[c.id] }}</td>
+        <td><span class="tag tag-{{ 'ok' if c.status == 'ACTIVE' else ('warn' if c.status == 'FAILED' else '') }}">{{ c.status }}</span></td>
+        <td class="muted">{% if c.last_test_result %}{{ 'OK' if c.last_test_result.ok else 'FAIL' }} —
+          {{ c.last_test_result.detail[:80] }}{% else %}never{% endif %}</td>
+        <td>
+          <form method="post" action="/admin/integrations/test" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+            <input type="hidden" name="credential_id" value="{{ c.id }}">
+            <button class="btn btn-sm">Test</button>
+          </form>
+          <form method="post" action="/admin/integrations/status" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+            <input type="hidden" name="credential_id" value="{{ c.id }}">
+            <input type="hidden" name="status" value="{{ 'INACTIVE' if c.status == 'ACTIVE' else 'ACTIVE' }}">
+            <button class="btn btn-sm">{{ 'Deactivate' if c.status == 'ACTIVE' else 'Activate' }}</button>
+          </form>
+          <form method="post" action="/admin/integrations/delete" class="inline"
+                onsubmit="return confirm('Delete credential for {{ c.provider_key }}?')">
+            <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+            <input type="hidden" name="credential_id" value="{{ c.id }}">
+            <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No integrations yet. LLM provider keys currently resolve from the .env seed —
+      register them here to manage them from this page.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>{{ 'Update' if edit_row else 'Register' }} an integration</h2>
+    <form method="post" action="/admin/integrations/save">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <div class="form-grid">
+        <label>Provider key
+          <input name="provider_key" required value="{{ edit_row.provider_key if edit_row else '' }}"
+                 placeholder="gemini / gmail / telegram_bot / whatsapp_cloud / github">
+          <span class="muted">Stable machine id; LLM providers must match the gateway's provider name.</span>
+        </label>
+        <label>Type
+          <select name="provider_type">
+            {% for t in ['LLM', 'EMAIL', 'MESSAGING', 'TRANSCRIPTION', 'VCS', 'GENERIC'] %}
+            <option value="{{ t }}" {{ 'selected' if edit_row and edit_row.provider_type == t else '' }}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Display name
+          <input name="name" value="{{ edit_row.name if edit_row else '' }}" placeholder="Gmail — aknja.system@gmail.com">
+        </label>
+        <label>Secrets (JSON)
+          <textarea name="secrets" rows="2" placeholder='{"api_key": "AIza..."} or {"bot_token": "123:ABC"}'></textarea>
+          <span class="muted">{% if edit_row %}Leave empty to keep the existing secret.{% else %}Required for new rows.{% endif %}
+            Write-only: the UI never renders a stored secret back.</span>
+        </label>
+        <label>Config (JSON, non-secret)
+          <textarea name="config" rows="2" placeholder='{"imap_host": "imap.gmail.com", "model": "gemini-2.5-flash"}'>{{ (edit_row.config | tojson) if edit_row else '{}' }}</textarea>
+        </label>
+      </div>
+      <button class="btn">{{ 'Save changes' if edit_row else 'Register credential' }}</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

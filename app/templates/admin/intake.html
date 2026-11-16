@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Intake — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="page-head">
+    <div><h1>Multi-Channel Intake</h1>
+      <p class="muted">Every inbound message — manual entry now, email / Telegram / WhatsApp / voice in later
+        phases (docs/34) — runs through one governed pipeline: AI classification → requirements extraction →
+        lead + founder notification. Raw input and both AI outputs are stored verbatim for full transparency.</p></div>
+    {% if flash %}<div class="alert {{ 'alert-ok' if flash_ok else 'alert-danger' }}">{{ flash }}</div>{% endif %}
+  </header>
+
+  <section class="card">
+    <h2>Record an inbound message</h2>
+    <form method="post" action="/admin/intake/submit">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <div class="form-grid">
+        <label>Channel
+          <select name="channel">
+            {% for ch in ['MANUAL', 'EMAIL', 'TELEGRAM', 'WHATSAPP', 'VOICE', 'PHONE'] %}
+            <option value="{{ ch }}">{{ ch }}</option>
+            {% endfor %}
+          </select>
+          <span class="muted">Choose the channel the message arrived on; MANUAL = pasted by the founder.</span>
+        </label>
+        <label>Sender
+          <input name="sender" placeholder="name / @handle / email / phone">
+        </label>
+      </div>
+      <label>Message content
+        <textarea name="content" rows="5" required
+                  placeholder="Paste the customer message, requirement or conversation here — any language."></textarea>
+      </label>
+      <button class="btn">Process through AI pipeline</button>
+    </form>
+  </section>
+
+  {% if detail %}
+  <section class="card">
+    <h2>Message {{ detail.id }} — {{ detail.status }}</h2>
+    <p><span class="tag">{{ detail.channel }}</span> from <strong>{{ detail.sender }}</strong>
+      · {{ detail.created_at.strftime('%Y-%m-%d %H:%M') if detail.created_at }}</p>
+    <h3>Original input</h3>
+    <pre class="pre-wrap">{{ detail.raw_content }}</pre>
+    {% if detail.ai_classification %}
+    <h3>AI classification ({{ detail.ai_classification.get('provider', '?') }})</h3>
+    <pre class="pre-wrap">{{ detail.ai_classification | tojson(indent=2) }}</pre>
+    {% endif %}
+    {% if detail.ai_extraction %}
+    <h3>AI requirements extraction ({{ detail.ai_extraction.get('provider', '?') }})</h3>
+    <pre class="pre-wrap">{{ detail.ai_extraction | tojson(indent=2) }}</pre>
+    {% endif %}
+    {% if detail.lead_id %}
+    <p>Created lead: <a href="/admin/leads">{{ detail.lead_id }}</a></p>
+    {% endif %}
+    {% if detail.notes %}<p class="muted">{{ detail.notes }}</p>{% endif %}
+    <form method="post" action="/admin/intake/reprocess" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <input type="hidden" name="message_id" value="{{ detail.id }}">
+      <button class="btn btn-sm">Re-run AI pipeline</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>Recent intake messages</h2>
+    {% if messages %}
+    <table class="table">
+      <thead><tr><th>When</th><th>Channel</th><th>Sender</th><th>Status</th><th>AI summary</th><th>Lead</th></tr></thead>
+      <tbody>
+      {% for m in messages %}
+      <tr>
+        <td>{{ m.created_at.strftime('%m-%d %H:%M') if m.created_at }}</td>
+        <td>{{ m.channel }}</td>
+        <td>{{ m.sender[:24] }}</td>
+        <td><span class="tag tag-{{ 'ok' if m.status == 'CONVERTED' else ('warn' if m.status == 'NEEDS_REVIEW' else '') }}">{{ m.status }}</span></td>
+        <td class="muted">{{ (m.ai_classification.get('summary', '') if m.ai_classification else '')[:70] }}</td>
+        <td>{{ '✓' if m.lead_id else '—' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">Nothing yet — record the first inbound message above.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
